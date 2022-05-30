@@ -18,9 +18,7 @@
 
 package org.apache.hudi
 
-import org.apache.avro.Schema
 import org.apache.hudi.common.model.HoodieRecord
-import org.apache.hudi.common.testutils.HoodieTestDataGenerator
 import org.apache.hudi.testutils.HoodieClientTestUtils
 import org.apache.spark.api.java.JavaSparkContext
 import org.apache.spark.sql.hudi.HoodieInternalRowUtils
@@ -112,31 +110,5 @@ class TestHoodieInternalRowUtils extends FunSuite with Matchers with BeforeAndAf
     assert(newRow.get(6, BooleanType) == null)
     assert(newRow.get(7, StringType).toString.equals("like"))
     assert(newRow.get(8, IntegerType) == 18)
-  }
-
-  test("test cache projection") {
-    val data1 = sparkSession.sparkContext.parallelize(Seq(Row("like", 18)))
-    val data2 = sparkSession.sparkContext.parallelize(Seq(Row("like", 18)))
-    val row1 = sparkSession.createDataFrame(data1, schema1).queryExecution.toRdd.first()
-    val row2 = sparkSession.createDataFrame(data2, schema1).queryExecution.toRdd.first()
-    val newRow1 = HoodieInternalRowUtils.rewriteRecord(row1, schema1, schemaMerge)
-    val newRow2 = HoodieInternalRowUtils.rewriteRecord(row2, schema1, schemaMerge)
-    assert(HoodieInternalRowUtils.projectionMap.size() == 1)
-    assert(newRow1.get(0, StringType).toString.equals("like"))
-    assert(newRow1.get(1, IntegerType) == 18)
-    assert(newRow1.get(2, StringType) == null)
-    assert(newRow1.get(3, IntegerType) == null)
-    assert(newRow2.get(0, StringType).toString.equals("like"))
-    assert(newRow2.get(1, IntegerType) == 18)
-    assert(newRow2.get(2, StringType) == null)
-    assert(newRow2.get(3, IntegerType) == null)
-  }
-
-  test("test cache schema") {
-    val avroSchema = new Schema.Parser().parse(HoodieTestDataGenerator.TRIP_EXAMPLE_SCHEMA)
-    HoodieInternalRowUtils.getCacheSchema(avroSchema)
-    HoodieInternalRowUtils.getCacheSchema(avroSchema)
-    HoodieInternalRowUtils.getCacheSchema(avroSchema)
-    assert(HoodieInternalRowUtils.schemaMap.size() == 1)
   }
 }
