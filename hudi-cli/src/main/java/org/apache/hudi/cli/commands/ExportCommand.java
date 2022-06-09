@@ -54,6 +54,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -125,7 +126,7 @@ public class ExportCommand implements CommandMarker {
       // read the avro blocks
       while (reader.hasNext() && copyCount < limit) {
         HoodieAvroDataBlock blk = (HoodieAvroDataBlock) reader.next();
-        try (ClosableIterator<HoodieRecord> recordItr = blk.getRecordIterator()) {
+        try (ClosableIterator<HoodieRecord> recordItr = blk.getRecordIterator(new HashMap<>())) {
           while (recordItr.hasNext()) {
             IndexedRecord ir = (IndexedRecord) recordItr.next().getData();
             // Archived instants are saved as arvo encoded HoodieArchivedMetaEntry records. We need to get the

@@ -37,6 +37,7 @@ import org.apache.hudi.common.model.HoodieAvroRecord;
 import org.apache.hudi.common.model.HoodieKey;
 import org.apache.hudi.common.model.HoodieRecord;
 import org.apache.hudi.common.util.FileIOUtils;
+import org.apache.hudi.common.util.MapperUtils;
 import org.apache.hudi.common.util.Option;
 import org.apache.hudi.config.HoodieIndexConfig;
 import org.apache.hudi.config.HoodieWriteConfig;
@@ -258,7 +259,7 @@ public class TestHoodieHFileReaderWriter extends TestHoodieReaderWriterBase {
 
     List<GenericRecord> recordsByPrefix = toStream(iterator).map(r -> (GenericRecord)r).collect(Collectors.toList());
 
-    List<GenericRecord> allRecords = toStream((Iterator<HoodieAvroIndexedRecord>) hfileReader.getRecordIterator((HoodieRecord.Mapper<IndexedRecord, IndexedRecord>) HoodieAvroIndexedRecord::new))
+    List<GenericRecord> allRecords = toStream((Iterator<HoodieAvroIndexedRecord>) hfileReader.getRecordIterator((MapperUtils.buildMapperConfig())))
         .map(r -> (GenericRecord) r.getData()).collect(Collectors.toList());
 
     assertEquals(allRecords, recordsByPrefix);

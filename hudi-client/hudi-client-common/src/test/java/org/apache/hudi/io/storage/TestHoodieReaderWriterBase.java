@@ -22,6 +22,7 @@ package org.apache.hudi.io.storage;
 import org.apache.hudi.common.bloom.BloomFilter;
 import org.apache.hudi.common.model.HoodieAvroIndexedRecord;
 import org.apache.hudi.common.model.HoodieRecord;
+import org.apache.hudi.common.util.MapperUtils;
 
 import org.apache.avro.Schema;
 import org.apache.avro.generic.GenericData;
@@ -112,7 +113,7 @@ public abstract class TestHoodieReaderWriterBase {
     Configuration conf = new Configuration();
     verifyMetadata(conf);
     verifySchema(conf, schemaPath);
-    verifySimpleRecords(new TransformIterator(createReader(conf).getRecordIterator((HoodieRecord.Mapper<IndexedRecord, IndexedRecord>) HoodieAvroIndexedRecord::new)));
+    verifySimpleRecords(new TransformIterator(createReader(conf).getRecordIterator(MapperUtils.buildMapperConfig())));
   }
 
   @Test
@@ -139,7 +140,7 @@ public abstract class TestHoodieReaderWriterBase {
     Configuration conf = new Configuration();
     verifyMetadata(conf);
     verifySchema(conf, schemaPath);
-    verifyComplexRecords(new TransformIterator(createReader(conf).getRecordIterator((HoodieRecord.Mapper<IndexedRecord, IndexedRecord>) HoodieAvroIndexedRecord::new)));
+    verifyComplexRecords(new TransformIterator(createReader(conf).getRecordIterator((MapperUtils.buildMapperConfig()))));
   }
 
   @Test
@@ -231,7 +232,7 @@ public abstract class TestHoodieReaderWriterBase {
 
   private void verifyReaderWithSchema(String schemaPath, HoodieAvroFileReader hoodieReader) throws IOException {
     Schema evolvedSchema = getSchemaFromResource(TestHoodieReaderWriterBase.class, schemaPath);
-    Iterator<IndexedRecord> iter = hoodieReader.getRecordIterator(evolvedSchema, (HoodieRecord.Mapper<IndexedRecord, IndexedRecord>) HoodieAvroIndexedRecord::new);
+    Iterator<IndexedRecord> iter = hoodieReader.getRecordIterator(evolvedSchema, MapperUtils.buildMapperConfig());
     int index = 0;
     while (iter.hasNext()) {
       verifyRecord(schemaPath, (GenericRecord) iter.next(), index);

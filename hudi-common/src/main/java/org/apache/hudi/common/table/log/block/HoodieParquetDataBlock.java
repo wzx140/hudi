@@ -18,14 +18,14 @@
 
 package org.apache.hudi.common.table.log.block;
 
-import org.apache.avro.generic.IndexedRecord;
 import org.apache.hudi.common.config.HoodieStorageConfig;
 import org.apache.hudi.common.fs.inline.InLineFSUtils;
 import org.apache.hudi.common.fs.inline.InLineFileSystem;
-import org.apache.hudi.common.model.HoodieAvroIndexedRecord;
 import org.apache.hudi.common.model.HoodieFileFormat;
+import org.apache.hudi.common.model.HoodieRecord.HoodieRecordType;
 import org.apache.hudi.common.util.ClosableIterator;
 import org.apache.hudi.common.model.HoodieRecord;
+import org.apache.hudi.common.util.MapperUtils;
 import org.apache.hudi.common.util.Option;
 import org.apache.hudi.io.storage.HoodieFileReaderFactory;
 import org.apache.hudi.io.storage.HoodieFileWriter;
@@ -45,8 +45,6 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
-import static org.apache.hudi.common.model.HoodieFileFormat.PARQUET;
 
 /**
  * HoodieParquetDataBlock contains a list of records serialized using Parquet.
@@ -124,7 +122,7 @@ public class HoodieParquetDataBlock extends HoodieDataBlock {
    *       requested by the caller (providing projected Reader's schema)
    */
   @Override
-  protected ClosableIterator<HoodieRecord> readRecordsFromBlockPayload() throws IOException {
+  protected ClosableIterator<HoodieRecord> readRecordsFromBlockPayload(Map<String, Object> mapperConfig) throws IOException {
     HoodieLogBlockContentLocation blockContentLoc = getBlockContentLocation().get();
 
     // NOTE: It's important to extend Hadoop configuration here to make sure configuration
@@ -138,14 +136,14 @@ public class HoodieParquetDataBlock extends HoodieDataBlock {
         blockContentLoc.getContentPositionInLogFile(),
         blockContentLoc.getBlockSize());
 
-    HoodieRecord.Mapper<IndexedRecord, IndexedRecord> mapper = HoodieAvroIndexedRecord::new;
-    ClosableIterator<HoodieRecord> iterator = HoodieFileReaderFactory.getFileReader(inlineConf, inlineLogFilePath, PARQUET)
-        .getRecordIterator(readerSchema, mapper);
+    HoodieRecordType type = (HoodieRecordType) mapperConfig.get(MapperUtils.RECORD_TYPE);
+    ClosableIterator<HoodieRecord> iterator = HoodieFileReaderFactory.getReaderFactory(type).getFileReader(inlineConf, inlineLogFilePath)
+        .getRecordIterator(readerSchema, mapperConfig);
     return iterator;
   }
 
   @Override
-  protected ClosableIterator<HoodieRecord> deserializeRecords(byte[] content) throws IOException {
+  protected ClosableIterator<HoodieRecord> deserializeRecords(byte[] content, Map<String, Object> mapperConfig) throws IOException {
     throw new UnsupportedOperationException("Should not be invoked");
   }
 }

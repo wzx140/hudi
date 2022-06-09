@@ -140,13 +140,13 @@ public abstract class HoodieDataBlock extends HoodieLogBlock {
   /**
    * Returns all the records iterator contained w/in this block.
    */
-  public final ClosableIterator<HoodieRecord> getRecordIterator() {
+  public final ClosableIterator<HoodieRecord> getRecordIterator(Map<String, Object> mapperConfig) {
     if (records.isPresent()) {
       return list2Iterator(records.get());
     }
     try {
       // in case records are absent, read content lazily and then convert to IndexedRecords
-      return readRecordsFromBlockPayload();
+      return readRecordsFromBlockPayload(mapperConfig);
     } catch (IOException io) {
       throw new HoodieIOException("Unable to convert content bytes to records", io);
     }
@@ -164,7 +164,7 @@ public abstract class HoodieDataBlock extends HoodieLogBlock {
    * @return List of IndexedRecords for the keys of interest.
    * @throws IOException in case of failures encountered when reading/parsing records
    */
-  public final ClosableIterator<HoodieRecord> getRecordIterator(List<String> keys, boolean fullKey) throws IOException {
+  public final ClosableIterator<HoodieRecord> getRecordIterator(List<String> keys, boolean fullKey, Map<String, Object> mapperConfig) throws IOException {
     boolean fullScan = keys.isEmpty();
     if (enablePointLookups && !fullScan) {
       return lookupRecords(keys, fullKey);
@@ -172,7 +172,7 @@ public abstract class HoodieDataBlock extends HoodieLogBlock {
 
     // Otherwise, we fetch all the records and filter out all the records, but the
     // ones requested
-    ClosableIterator<HoodieRecord> allRecords = getRecordIterator();
+    ClosableIterator<HoodieRecord> allRecords = getRecordIterator(mapperConfig);
     if (fullScan) {
       return allRecords;
     }
@@ -181,14 +181,14 @@ public abstract class HoodieDataBlock extends HoodieLogBlock {
     return FilteringIterator.getInstance(allRecords, keySet, fullKey, this::getRecordKey);
   }
 
-  protected ClosableIterator<HoodieRecord> readRecordsFromBlockPayload() throws IOException {
+  protected ClosableIterator<HoodieRecord> readRecordsFromBlockPayload(Map<String, Object> mapperConfig) throws IOException {
     if (readBlockLazily && !getContent().isPresent()) {
       // read log block contents from disk
       inflate();
     }
 
     try {
-      return deserializeRecords(getContent().get());
+      return deserializeRecords(getContent().get(), mapperConfig);
     } finally {
       // Free up content to be GC'd by deflating the block
       deflate();
@@ -203,7 +203,7 @@ public abstract class HoodieDataBlock extends HoodieLogBlock {
 
   protected abstract byte[] serializeRecords(List<HoodieRecord> records) throws IOException;
 
-  protected abstract ClosableIterator<HoodieRecord> deserializeRecords(byte[] content) throws IOException;
+  protected abstract ClosableIterator<HoodieRecord> deserializeRecords(byte[] content, Map<String, Object> mapperConfig) throws IOException;
 
   public abstract HoodieLogBlockType getBlockType();
 

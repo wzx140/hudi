@@ -18,12 +18,11 @@
 
 package org.apache.hudi.table.action.commit;
 
-import org.apache.avro.generic.IndexedRecord;
 import org.apache.hudi.client.WriteStatus;
 import org.apache.hudi.common.model.HoodieBaseFile;
-import org.apache.hudi.common.model.HoodieAvroIndexedRecord;
 import org.apache.hudi.common.model.HoodieKey;
 import org.apache.hudi.common.model.HoodieRecord;
+import org.apache.hudi.common.util.MapperUtils;
 import org.apache.hudi.common.util.Option;
 import org.apache.hudi.common.util.queue.BoundedInMemoryExecutor;
 import org.apache.hudi.common.util.queue.IteratorBasedQueueProducer;
@@ -71,7 +70,7 @@ public class JavaMergeHelper<T> extends BaseMergeHelper<T, List<HoodieRecord<T>>
     final GenericDatumReader<GenericRecord> gReader;
     Schema readSchema;
     if (externalSchemaTransformation || baseFile.getBootstrapBaseFile().isPresent()) {
-      readSchema = HoodieFileReaderFactory.getFileReader(table.getHadoopConf(), mergeHandle.getOldFilePath()).getSchema();
+      readSchema = HoodieFileReaderFactory.getReaderFactory(table.getConfig().getRecordType()).getFileReader(table.getHadoopConf(), mergeHandle.getOldFilePath()).getSchema();
       gWriter = new GenericDatumWriter<>(readSchema);
       gReader = new GenericDatumReader<>(readSchema, mergeHandle.getWriterSchemaWithMetaFields());
     } else {
@@ -81,13 +80,13 @@ public class JavaMergeHelper<T> extends BaseMergeHelper<T, List<HoodieRecord<T>>
     }
 
     BoundedInMemoryExecutor<GenericRecord, GenericRecord, Void> wrapper = null;
-    HoodieFileReader reader = HoodieFileReaderFactory.getFileReader(cfgForHoodieFile, mergeHandle.getOldFilePath());
+    HoodieFileReader reader = HoodieFileReaderFactory.getReaderFactory(table.getConfig().getRecordType()).getFileReader(cfgForHoodieFile, mergeHandle.getOldFilePath());
     try {
       final Iterator<HoodieRecord> readerIterator;
       if (baseFile.getBootstrapBaseFile().isPresent()) {
         readerIterator = getMergingIterator(table, mergeHandle, baseFile, reader, readSchema, externalSchemaTransformation);
       } else {
-        readerIterator = reader.getRecordIterator(readSchema, (HoodieRecord.Mapper<IndexedRecord, IndexedRecord>) HoodieAvroIndexedRecord::new);
+        readerIterator = reader.getRecordIterator(readSchema, MapperUtils.buildMapperConfig(table.getConfig().getRecordType()));
       }
 
       ThreadLocal<BinaryEncoder> encoderCache = new ThreadLocal<>();

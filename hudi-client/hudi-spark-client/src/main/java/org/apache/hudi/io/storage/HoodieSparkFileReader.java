@@ -18,24 +18,37 @@
 
 package org.apache.hudi.io.storage;
 
-import org.apache.avro.Schema;
-import org.apache.hudi.common.model.HoodieKey;
 import org.apache.hudi.common.model.HoodieRecord;
-import org.apache.hudi.common.model.HoodieSparkRecord;
 import org.apache.hudi.common.util.ClosableIterator;
 import org.apache.hudi.common.util.MappingIterator;
+import org.apache.hudi.common.util.ReflectionUtils;
+import org.apache.hudi.exception.HoodieException;
+
+import org.apache.avro.Schema;
 import org.apache.spark.sql.catalyst.InternalRow;
 
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.util.Map;
+import java.util.function.Function;
 
 public interface HoodieSparkFileReader extends HoodieFileReader<InternalRow> {
 
   ClosableIterator<InternalRow> getInternalRowIterator(Schema readerSchema) throws IOException;
 
-  default ClosableIterator<HoodieRecord<InternalRow>> getRecordIterator(Schema readerSchema, HoodieRecord.Mapper mapper) throws IOException {
-    mapper = (HoodieRecord.Mapper<InternalRow, InternalRow>) (internalRow) -> new HoodieSparkRecord(new HoodieKey(internalRow.getString(HoodieRecord.HoodieMetadataField.RECORD_KEY_METADATA_FIELD.ordinal()),
-        internalRow.getString(HoodieRecord.HoodieMetadataField.PARTITION_PATH_METADATA_FIELD.ordinal())),
-        internalRow, null);
-    return new MappingIterator<InternalRow, HoodieRecord<InternalRow>>(getInternalRowIterator(readerSchema), mapper::apply);
+  default ClosableIterator<HoodieRecord<InternalRow>> getRecordIterator(Schema readerSchema, Map<String, Object> prop) throws IOException {
+    return new MappingIterator<>(getInternalRowIterator(readerSchema), createMapper(readerSchema, prop));
+  }
+
+  static Function<InternalRow, HoodieRecord<InternalRow>> createMapper(Schema schema, Map<String, Object> prop) {
+    Class<?> utils = ReflectionUtils.getClass("org.apache.spark.sql.hudi.HoodieSparkRecordUtils");
+    Method createMapper = null;
+    try {
+      createMapper = utils.getMethod("createMapper", Schema.class, Map.class);
+      return (Function<InternalRow, HoodieRecord<InternalRow>>) createMapper.invoke(null, schema, prop);
+    } catch (NoSuchMethodException | IllegalAccessException | InvocationTargetException e) {
+      throw new HoodieException(e);
+    }
   }
 }

@@ -19,16 +19,12 @@
 package org.apache.hudi.metadata;
 
 import org.apache.avro.Schema;
-import org.apache.avro.generic.GenericRecord;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hudi.common.config.HoodieMetadataConfig;
-import org.apache.hudi.common.model.HoodieAvroIndexedRecord;
 import org.apache.hudi.common.model.HoodieRecord;
-import org.apache.hudi.common.table.HoodieTableConfig;
 import org.apache.hudi.common.table.log.HoodieMergedLogRecordScanner;
 import org.apache.hudi.common.table.log.InstantRange;
 import org.apache.hudi.common.util.Option;
-import org.apache.hudi.common.util.SpillableMapUtils;
 import org.apache.hudi.common.util.collection.ExternalSpillableMap;
 import org.apache.hudi.common.util.collection.Pair;
 import org.apache.hudi.internal.schema.InternalSchema;
@@ -63,22 +59,49 @@ public class HoodieMetadataMergedLogRecordReader extends HoodieMergedLogRecordSc
         spillableMapBasePath, instantRange, diskMapType, isBitCaskDiskMapCompressionEnabled, false, allowFullScan, Option.of(partitionName), InternalSchema.getEmptyInternalSchema());
   }
 
-  @Override
-  protected <T, R> HoodieRecord<R> createHoodieRecord(final HoodieRecord<T> rec, final HoodieTableConfig hoodieTableConfig,
-                                               final String payloadClassFQN, final String preCombineField,
-                                               final boolean withOperationField,
-                                               final Option<Pair<String, String>> simpleKeyGenFields,
-                                               final Option<String> partitionName) {
-    if (hoodieTableConfig.populateMetaFields()) {
-      return super.createHoodieRecord(rec, hoodieTableConfig, payloadClassFQN, preCombineField, withOperationField,
-          simpleKeyGenFields, partitionName);
-    }
-
-    // When meta fields are not available, create the record using the
-    // preset key field and the known partition name
-    return SpillableMapUtils.convertToHoodieRecordPayload((GenericRecord) ((HoodieAvroIndexedRecord) rec).getData(), payloadClassFQN,
-        preCombineField, simpleKeyGenFields.get(), withOperationField, partitionName);
-  }
+  // TODO remove
+  // MetaData only need to be HoodieRecord<HoodieMetadataPayload>
+  //  protected <T, R> HoodieRecord<R> createHoodieRecord(final HoodieRecord<T> rec, final HoodieTableConfig hoodieTableConfig,
+  //                                               final String payloadClassFQN, final String preCombineField,
+  //                                               final boolean withOperationField,
+  //                                               final Option<Pair<String, String>> simpleKeyGenFields,
+  //                                               final Option<String> partitionName) {
+  //    if (hoodieTableConfig.populateMetaFields()) {
+  //      return createHoodieRecord(rec, hoodieTableConfig, payloadClassFQN, preCombineField, withOperationField,
+  //          simpleKeyGenFields, partitionName);
+  //    }
+  //
+  //    // When meta fields are not available, create the record using the
+  //    // preset key field and the known partition name
+  //    return SpillableMapUtils.convertToHoodieRecordPayload((GenericRecord) ((HoodieAvroIndexedRecord) rec).getData(), payloadClassFQN,
+  //        preCombineField, simpleKeyGenFields.get(), withOperationField, partitionName);
+  //  }
+  //
+  //  /**
+  //   * Create @{@link HoodieRecord} from the @{@link IndexedRecord}.
+  //   *
+  //   * @param rec                - IndexedRecord to create the HoodieRecord from
+  //   * @param hoodieTableConfig  - Table config
+  //   * @param payloadClassFQN    - Payload class fully qualified name
+  //   * @param preCombineField    - PreCombine field
+  //   * @param withOperationField - Whether operation field is enabled
+  //   * @param simpleKeyGenFields - Key generator fields when populate meta fields is tuened off
+  //   * @param partitionName      - Partition name
+  //   * @return HoodieRecord created from the IndexedRecord
+  //   */
+  //  protected <R> HoodieRecord<R> createHoodieRecord(final IndexedRecord rec, final HoodieTableConfig hoodieTableConfig,
+  //      final String payloadClassFQN, final String preCombineField,
+  //      final boolean withOperationField,
+  //      final Option<Pair<String, String>> simpleKeyGenFields,
+  //      final Option<String> partitionName) {
+  //    if (this.populateMetaFields) {
+  //      return SpillableMapUtils.convertToHoodieRecordPayload((GenericRecord) rec, payloadClassFQN,
+  //          preCombineField, withOperationField);
+  //    } else {
+  //      return SpillableMapUtils.convertToHoodieRecordPayload((GenericRecord) rec, payloadClassFQN,
+  //          preCombineField, simpleKeyGenFields.get(), withOperationField, partitionName);
+  //    }
+  //  }
 
   /**
    * Returns the builder for {@code HoodieMetadataMergedLogRecordScanner}.

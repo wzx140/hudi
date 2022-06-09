@@ -82,7 +82,7 @@ public class ArchivedCommitsCommand implements CommandMarker {
       // read the avro blocks
       while (reader.hasNext()) {
         HoodieAvroDataBlock blk = (HoodieAvroDataBlock) reader.next();
-        blk.getRecordIterator().forEachRemaining(r -> readRecords.add((IndexedRecord) r.getData()));
+        blk.getRecordIterator(new HashMap<>()).forEachRemaining(r -> readRecords.add((IndexedRecord) r.getData()));
       }
       List<Comparable[]> readCommits = readRecords.stream().map(r -> (GenericRecord) r)
           .filter(r -> r.get("actionType").toString().equals(HoodieTimeline.COMMIT_ACTION)
@@ -156,7 +156,7 @@ public class ArchivedCommitsCommand implements CommandMarker {
       // read the avro blocks
       while (reader.hasNext()) {
         HoodieAvroDataBlock blk = (HoodieAvroDataBlock) reader.next();
-        try (ClosableIterator<HoodieRecord> recordItr = blk.getRecordIterator()) {
+        try (ClosableIterator<HoodieRecord> recordItr = blk.getRecordIterator(new HashMap<>())) {
           recordItr.forEachRemaining(r -> readRecords.add((IndexedRecord) r.getData()));
         }
       }

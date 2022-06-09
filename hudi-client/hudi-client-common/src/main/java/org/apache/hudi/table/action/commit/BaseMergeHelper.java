@@ -18,21 +18,13 @@
 
 package org.apache.hudi.table.action.commit;
 
-import org.apache.avro.Schema;
-import org.apache.avro.generic.GenericRecord;
-import org.apache.avro.generic.IndexedRecord;
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.Path;
 import org.apache.hudi.client.utils.MergingIterator;
 import org.apache.hudi.common.model.HoodieAvroIndexedRecord;
 import org.apache.hudi.common.model.HoodieBaseFile;
 import org.apache.hudi.common.model.HoodieRecord;
-import org.apache.hudi.common.table.HoodieTableConfig;
-import org.apache.hudi.common.util.Option;
-import org.apache.hudi.common.util.SpillableMapUtils;
-import org.apache.hudi.common.util.collection.Pair;
+import org.apache.hudi.common.model.HoodieRecord.HoodieRecordType;
+import org.apache.hudi.common.util.MapperUtils;
 import org.apache.hudi.common.util.queue.BoundedInMemoryQueueConsumer;
-import org.apache.hudi.config.HoodieWriteConfig;
 import org.apache.hudi.exception.HoodieException;
 import org.apache.hudi.exception.HoodieIOException;
 import org.apache.hudi.io.HoodieMergeHandle;
@@ -46,12 +38,17 @@ import org.apache.avro.io.BinaryDecoder;
 import org.apache.avro.io.BinaryEncoder;
 import org.apache.avro.io.DecoderFactory;
 import org.apache.avro.io.EncoderFactory;
+import org.apache.avro.Schema;
+import org.apache.avro.generic.GenericRecord;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.Path;
 
 import javax.annotation.Nonnull;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.Iterator;
+import java.util.Map;
 
 /**
  * Helper to read records from previous version of base file and run Merge.
@@ -105,7 +102,8 @@ public abstract class BaseMergeHelper<T, I, K, O> {
                                                       boolean externalSchemaTransformation) throws IOException {
     Path externalFilePath = new Path(baseFile.getBootstrapBaseFile().get().getPath());
     Configuration bootstrapFileConfig = new Configuration(table.getHadoopConf());
-    HoodieFileReader bootstrapReader = HoodieFileReaderFactory.getFileReader(bootstrapFileConfig, externalFilePath);
+    HoodieRecordType recordType = table.getConfig().getRecordType();
+    HoodieFileReader bootstrapReader = HoodieFileReaderFactory.getReaderFactory(recordType).getFileReader(bootstrapFileConfig, externalFilePath);
 
     Schema bootstrapReadSchema;
     if (externalSchemaTransformation) {
@@ -114,9 +112,10 @@ public abstract class BaseMergeHelper<T, I, K, O> {
       bootstrapReadSchema = mergeHandle.getWriterSchema();
     }
 
-    return new MergingIterator<HoodieRecord>(
-        reader.getRecordIterator(readerSchema, (HoodieRecord.Mapper<IndexedRecord, IndexedRecord>) HoodieAvroIndexedRecord::new),
-        bootstrapReader.getRecordIterator(bootstrapReadSchema, (HoodieRecord.Mapper<IndexedRecord, IndexedRecord>) HoodieAvroIndexedRecord::new),
+    Map<String, Object> mapperConfig = MapperUtils.buildMapperConfig(recordType);
+    return new MergingIterator<>(
+        (Iterator<HoodieRecord>) reader.getRecordIterator(readerSchema, mapperConfig),
+        (Iterator<HoodieRecord>) bootstrapReader.getRecordIterator(bootstrapReadSchema, mapperConfig),
         (oneRecord, otherRecord) -> mergeRecords(oneRecord, otherRecord, readerSchema, mergeHandle.getWriterSchemaWithMetaFields()));
   }
 
@@ -127,30 +126,6 @@ public abstract class BaseMergeHelper<T, I, K, O> {
     } catch (IOException e) {
       throw new HoodieIOException("Failed to merge records", e);
     }
-  }
-
-  protected static HoodieRecord.Mapper createHoodieRecordMapper(HoodieTable<?, ?, ?, ?> table) {
-    return createHoodieRecordMapper(table, Option.empty());
-  }
-
-  protected static HoodieRecord.Mapper createHoodieRecordMapper(HoodieTable<?, ?, ?, ?> table, Option<String> partitionPathOpt) {
-    HoodieTableConfig tableConfig = table.getMetaClient().getTableConfig();
-    HoodieWriteConfig writeConfig = table.getConfig();
-
-    String payloadClassFQN = tableConfig.getPayloadClass();
-    String preCombineField = tableConfig.getPreCombineField();
-    boolean allowOperationMetadataField = writeConfig.allowOperationMetadataField();
-
-    boolean populateMetaFields = tableConfig.populateMetaFields();
-    String recordKeyFieldName = tableConfig.getRecordKeyFieldProp();
-    String recordPartitionFieldName = tableConfig.getPartitionFieldProp();
-
-    return (record) ->
-        populateMetaFields
-            ? SpillableMapUtils.convertToHoodieRecordPayload((GenericRecord) record, payloadClassFQN, preCombineField,
-            Pair.of(recordKeyFieldName, recordPartitionFieldName), allowOperationMetadataField, partitionPathOpt)
-            : SpillableMapUtils.convertToHoodieRecordPayload((GenericRecord) record, payloadClassFQN, preCombineField,
-            allowOperationMetadataField, partitionPathOpt);
   }
 
   /**

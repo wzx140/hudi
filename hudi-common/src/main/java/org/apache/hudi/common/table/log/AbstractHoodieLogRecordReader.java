@@ -19,7 +19,6 @@
 package org.apache.hudi.common.table.log;
 
 import org.apache.hudi.common.model.DeleteRecord;
-import org.apache.hudi.common.model.HoodieAvroIndexedRecord;
 import org.apache.hudi.common.model.HoodieLogFile;
 import org.apache.hudi.common.model.HoodieRecord;
 import org.apache.hudi.common.table.HoodieTableConfig;
@@ -34,8 +33,8 @@ import org.apache.hudi.common.table.log.block.HoodieLogBlock;
 import org.apache.hudi.common.table.log.block.HoodieParquetDataBlock;
 import org.apache.hudi.common.table.timeline.HoodieTimeline;
 import org.apache.hudi.common.util.ClosableIterator;
+import org.apache.hudi.common.util.MapperUtils;
 import org.apache.hudi.common.util.Option;
-import org.apache.hudi.common.util.SpillableMapUtils;
 import org.apache.hudi.common.util.InternalSchemaCache;
 import org.apache.hudi.common.util.ValidationUtils;
 import org.apache.hudi.common.util.collection.Pair;
@@ -43,8 +42,6 @@ import org.apache.hudi.exception.HoodieException;
 import org.apache.hudi.exception.HoodieIOException;
 
 import org.apache.avro.Schema;
-import org.apache.avro.generic.GenericRecord;
-import org.apache.avro.generic.IndexedRecord;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hudi.internal.schema.InternalSchema;
@@ -60,6 +57,7 @@ import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
@@ -379,10 +377,8 @@ public abstract class AbstractHoodieLogRecordReader {
    * handle it.
    */
   private void processDataBlock(HoodieDataBlock dataBlock, Option<KeySpec> keySpecOpt) throws Exception {
-    HoodieRecord.Mapper<HoodieRecord, ?> mapper = (rec) -> createHoodieRecord(rec, this.hoodieTableMetaClient.getTableConfig(),
-        this.payloadClassFQN, this.preCombineField, this.withOperationField, this.simpleKeyGenFields, this.partitionName);
-
-    try (ClosableIterator<HoodieRecord> recordIterator = getRecordsIterator(dataBlock, keySpecOpt)) {
+    Map<String, Object> mapperConfig = MapperUtils.buildMapperConfig(this.payloadClassFQN, this.preCombineField, this.simpleKeyGenFields, this.withOperationField, this.partitionName);
+    try (ClosableIterator<HoodieRecord> recordIterator = getRecordsIterator(dataBlock, keySpecOpt, mapperConfig)) {
       Option<Schema> schemaOption = getMergedSchema(dataBlock);
       Schema finalReadSchema;
       if (recordIterator instanceof RecordIterator) {
@@ -391,9 +387,9 @@ public abstract class AbstractHoodieLogRecordReader {
         finalReadSchema = dataBlock.getSchema();
       }
       while (recordIterator.hasNext()) {
-        HoodieRecord currentRecord = mapper.apply(recordIterator.next());
+        HoodieRecord currentRecord = recordIterator.next();
         HoodieRecord record = schemaOption.isPresent()
-            ? currentRecord.rewriteRecordWithNewSchema(finalReadSchema, new Properties(), schemaOption.get(), new HashMap<>(), mapper) : currentRecord;
+            ? currentRecord.rewriteRecordWithNewSchema(finalReadSchema, new Properties(), schemaOption.get(), new HashMap<>()) : currentRecord;
         processNextRecord(record);
         totalLogRecords.incrementAndGet();
       }
@@ -420,38 +416,6 @@ public abstract class AbstractHoodieLogRecordReader {
       result = Option.of(mergeSchema);
     }
     return result;
-  }
-
-  /**
-   * Create @{@link HoodieRecord} from the @{@link IndexedRecord}.
-   *
-   * @param rec                - IndexedRecord to create the HoodieRecord from
-   * @param hoodieTableConfig  - Table config
-   * @param payloadClassFQN    - Payload class fully qualified name
-   * @param preCombineField    - PreCombine field
-   * @param withOperationField - Whether operation field is enabled
-   * @param simpleKeyGenFields - Key generator fields when populate meta fields is tuened off
-   * @param partitionName      - Partition name
-   * @return HoodieRecord created from the IndexedRecord
-   */
-  protected <T, R> HoodieRecord<R> createHoodieRecord(final HoodieRecord<T> rec, final HoodieTableConfig hoodieTableConfig,
-                                               final String payloadClassFQN, final String preCombineField,
-                                               final boolean withOperationField,
-                                               final Option<Pair<String, String>> simpleKeyGenFields,
-                                               final Option<String> partitionName) {
-    if (rec instanceof HoodieAvroIndexedRecord) {
-      if (this.populateMetaFields) {
-        return SpillableMapUtils.convertToHoodieRecordPayload((GenericRecord) ((HoodieAvroIndexedRecord) rec).getData(), payloadClassFQN,
-            preCombineField, withOperationField);
-      } else {
-        return SpillableMapUtils.convertToHoodieRecordPayload((GenericRecord) ((HoodieAvroIndexedRecord) rec).getData(), payloadClassFQN,
-            preCombineField, simpleKeyGenFields.get(), withOperationField, partitionName);
-      }
-    } else if (rec.getClass().getSimpleName().equals("HoodieSparkRecord")) {
-      return (HoodieRecord<R>) rec;
-    } else {
-      throw new UnsupportedOperationException("unsupported record type");
-    }
   }
 
   /**
@@ -501,13 +465,13 @@ public abstract class AbstractHoodieLogRecordReader {
     progress = numLogFilesSeen - 1 / logFilePaths.size();
   }
 
-  private ClosableIterator<HoodieRecord> getRecordsIterator(HoodieDataBlock dataBlock, Option<KeySpec> keySpecOpt) throws IOException {
+  private ClosableIterator<HoodieRecord> getRecordsIterator(HoodieDataBlock dataBlock, Option<KeySpec> keySpecOpt, Map<String, Object> mapperConfig) throws IOException {
     if (keySpecOpt.isPresent()) {
       KeySpec keySpec = keySpecOpt.get();
-      return dataBlock.getRecordIterator(keySpec.keys, keySpec.fullKey);
+      return dataBlock.getRecordIterator(keySpec.keys, keySpec.fullKey, mapperConfig);
     }
 
-    return dataBlock.getRecordIterator();
+    return dataBlock.getRecordIterator(mapperConfig);
   }
 
   /**

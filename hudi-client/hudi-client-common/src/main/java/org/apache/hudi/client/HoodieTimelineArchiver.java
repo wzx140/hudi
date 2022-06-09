@@ -49,6 +49,7 @@ import org.apache.hudi.common.table.view.FileSystemViewStorageConfig;
 import org.apache.hudi.common.util.CollectionUtils;
 import org.apache.hudi.common.util.CompactionUtils;
 import org.apache.hudi.common.util.FileIOUtils;
+import org.apache.hudi.common.util.MapperUtils;
 import org.apache.hudi.common.util.Option;
 import org.apache.hudi.common.util.collection.Pair;
 import org.apache.hudi.config.HoodieWriteConfig;
@@ -341,7 +342,7 @@ public class HoodieTimelineArchiver<T extends HoodieAvroPayload, I, K, O> {
           // Read the avro blocks
           while (reader.hasNext()) {
             HoodieAvroDataBlock blk = (HoodieAvroDataBlock) reader.next();
-            blk.getRecordIterator().forEachRemaining(r -> records.add((IndexedRecord) r.getData()));
+            blk.getRecordIterator(MapperUtils.buildMapperConfig()).forEachRemaining(r -> records.add((IndexedRecord) r.getData()));
             if (records.size() >= this.config.getCommitArchivalBatchSize()) {
               writeToFile(wrapperSchema, records);
             }

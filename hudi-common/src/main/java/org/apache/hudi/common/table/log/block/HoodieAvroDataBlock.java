@@ -18,6 +18,15 @@
 
 package org.apache.hudi.common.table.log.block;
 
+import org.apache.hudi.common.fs.SizeAwareDataInputStream;
+import org.apache.hudi.common.model.HoodieAvroIndexedRecord;
+import org.apache.hudi.common.model.HoodieRecord;
+import org.apache.hudi.common.model.HoodieRecord.HoodieRecordType;
+import org.apache.hudi.common.util.ClosableIterator;
+import org.apache.hudi.common.util.Option;
+import org.apache.hudi.exception.HoodieIOException;
+import org.apache.hudi.internal.schema.InternalSchema;
+
 import org.apache.avro.Schema;
 import org.apache.avro.generic.GenericDatumReader;
 import org.apache.avro.generic.GenericDatumWriter;
@@ -29,13 +38,6 @@ import org.apache.avro.io.DecoderFactory;
 import org.apache.avro.io.Encoder;
 import org.apache.avro.io.EncoderFactory;
 import org.apache.hadoop.fs.FSDataInputStream;
-import org.apache.hudi.common.fs.SizeAwareDataInputStream;
-import org.apache.hudi.common.model.HoodieAvroIndexedRecord;
-import org.apache.hudi.common.model.HoodieRecord;
-import org.apache.hudi.common.util.ClosableIterator;
-import org.apache.hudi.common.util.Option;
-import org.apache.hudi.exception.HoodieIOException;
-import org.apache.hudi.internal.schema.InternalSchema;
 
 import javax.annotation.Nonnull;
 
@@ -54,10 +56,14 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.zip.DeflaterOutputStream;
 import java.util.zip.InflaterInputStream;
 
+import static org.apache.hudi.common.util.MapperUtils.RECORD_TYPE;
+import static org.apache.hudi.common.util.MapperUtils.createConverter;
+import static org.apache.hudi.common.util.MapperUtils.createMapper;
 import static org.apache.hudi.common.util.ValidationUtils.checkState;
 
 /**
@@ -142,25 +148,25 @@ public class HoodieAvroDataBlock extends HoodieDataBlock {
 
   // TODO (na) - Break down content into smaller chunks of byte [] to be GC as they are used
   @Override
-  protected ClosableIterator<HoodieRecord> deserializeRecords(byte[] content) throws IOException {
+  protected ClosableIterator<HoodieRecord> deserializeRecords(byte[] content, Map<String, Object> mapperConfig) throws IOException {
     checkState(this.readerSchema != null, "Reader's schema has to be non-null");
-    return RecordIterator.getInstance(this, content, internalSchema);
+    return RecordIterator.getInstance(this, content, internalSchema, mapperConfig);
   }
 
   public static class RecordIterator implements ClosableIterator<HoodieRecord> {
+
     private byte[] content;
     private final SizeAwareDataInputStream dis;
     private final GenericDatumReader<IndexedRecord> reader;
     private final ThreadLocal<BinaryDecoder> decoderCache = new ThreadLocal<>();
-    private final HoodieRecord.Mapper mapper;
     private final Schema finalReadSchema;
+    private final Function<IndexedRecord, HoodieRecord<Object>> mapper;
 
     private int totalRecords = 0;
     private int readRecords = 0;
 
-    private RecordIterator(Schema readerSchema, Schema writerSchema, byte[] content, InternalSchema internalSchema) throws IOException {
+    private RecordIterator(Schema readerSchema, Schema writerSchema, byte[] content, InternalSchema internalSchema, Map<String, Object> mapperConfig) throws IOException {
       this.content = content;
-      this.mapper = (HoodieRecord.Mapper<IndexedRecord, IndexedRecord>) HoodieAvroIndexedRecord::new;
 
       this.dis = new SizeAwareDataInputStream(new DataInputStream(new ByteArrayInputStream(this.content)));
 
@@ -183,12 +189,15 @@ public class HoodieAvroDataBlock extends HoodieDataBlock {
       if (logBlockVersion.hasRecordCount()) {
         this.totalRecords = this.dis.readInt();
       }
+      HoodieRecordType recordType = HoodieRecordType.valueOf(mapperConfig.get(RECORD_TYPE).toString());
+      Function converter = createConverter(this.getClass(), recordType, finalReadSchema);
+      this.mapper = createMapper(mapperConfig, Option.of(converter));
     }
 
-    public static RecordIterator getInstance(HoodieAvroDataBlock dataBlock, byte[] content, InternalSchema internalSchema) throws IOException {
+    public static RecordIterator getInstance(HoodieAvroDataBlock dataBlock, byte[] content, InternalSchema internalSchema, Map<String, Object> mapperConfig) throws IOException {
       // Get schema from the header
       Schema writerSchema = new Schema.Parser().parse(dataBlock.getLogBlockHeader().get(HeaderMetadataType.SCHEMA));
-      return new RecordIterator(dataBlock.readerSchema, writerSchema, content, internalSchema);
+      return new RecordIterator(dataBlock.readerSchema, writerSchema, content, internalSchema, mapperConfig);
     }
 
     public Schema getFinalReadSchema() {
@@ -216,7 +225,7 @@ public class HoodieAvroDataBlock extends HoodieDataBlock {
       try {
         int recordLength = this.dis.readInt();
         BinaryDecoder decoder = DecoderFactory.get().binaryDecoder(this.content, this.dis.getNumberOfBytesRead(),
-                recordLength, this.decoderCache.get());
+            recordLength, this.decoderCache.get());
         this.decoderCache.set(decoder);
         IndexedRecord record = this.reader.read(null, decoder);
         this.dis.skipBytes(recordLength);
@@ -236,8 +245,7 @@ public class HoodieAvroDataBlock extends HoodieDataBlock {
   //----------------------------------------------------------------------------------------
 
   /**
-   * This constructor is retained to provide backwards compatibility to HoodieArchivedLogs which were written using
-   * HoodieLogFormat V1.
+   * This constructor is retained to provide backwards compatibility to HoodieArchivedLogs which were written using HoodieLogFormat V1.
    */
   @Deprecated
   public HoodieAvroDataBlock(List<HoodieRecord> records, Schema schema) {
@@ -249,8 +257,7 @@ public class HoodieAvroDataBlock extends HoodieDataBlock {
   }
 
   /**
-   * This method is retained to provide backwards compatibility to HoodieArchivedLogs which were written using
-   * HoodieLogFormat V1.
+   * This method is retained to provide backwards compatibility to HoodieArchivedLogs which were written using HoodieLogFormat V1.
    */
   @Deprecated
   public static HoodieAvroDataBlock getBlock(byte[] content, Schema readerSchema, InternalSchema internalSchema) throws IOException {
@@ -328,7 +335,7 @@ public class HoodieAvroDataBlock extends HoodieDataBlock {
     output.write(schemaContent);
 
     List<HoodieRecord> records = new ArrayList<>();
-    try (ClosableIterator<HoodieRecord> recordItr = getRecordIterator()) {
+    try (ClosableIterator<HoodieRecord> recordItr = getRecordIterator(new HashMap<>())) {
       recordItr.forEachRemaining(records::add);
     }
 
@@ -338,7 +345,7 @@ public class HoodieAvroDataBlock extends HoodieDataBlock {
     // 4. Write the records
     Iterator<HoodieRecord> itr = records.iterator();
     while (itr.hasNext()) {
-      IndexedRecord s = (IndexedRecord)itr.next().getData();
+      IndexedRecord s = (IndexedRecord) itr.next().toIndexedRecord(schema, new Properties()).get();
       ByteArrayOutputStream temp = new ByteArrayOutputStream();
       Encoder encoder = EncoderFactory.get().binaryEncoder(temp, null);
       try {

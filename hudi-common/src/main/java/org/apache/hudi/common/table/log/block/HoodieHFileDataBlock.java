@@ -166,9 +166,8 @@ public class HoodieHFileDataBlock extends HoodieDataBlock {
   }
 
   @Override
-  protected ClosableIterator<HoodieRecord> deserializeRecords(byte[] content) throws IOException {
+  protected ClosableIterator<HoodieRecord> deserializeRecords(byte[] content, Map<String, Object> mapperConfig) throws IOException {
     checkState(readerSchema != null, "Reader's schema has to be non-null");
-    HoodieRecord.Mapper<IndexedRecord, IndexedRecord> mapper = HoodieAvroIndexedRecord::new;
 
     // Get schema from the header
     Schema writerSchema = new Schema.Parser().parse(super.getLogBlockHeader().get(HeaderMetadataType.SCHEMA));
@@ -176,7 +175,7 @@ public class HoodieHFileDataBlock extends HoodieDataBlock {
     FileSystem fs = FSUtils.getFs(pathForReader.toString(), new Configuration());
     // Read the content
     HoodieAvroHFileReader reader = new HoodieAvroHFileReader(fs, pathForReader, content, Option.of(writerSchema));
-    return reader.getRecordIterator(readerSchema, mapper);
+    return reader.getRecordIterator(readerSchema, new Properties());
   }
 
   // TODO abstract this w/in HoodieDataBlock
@@ -204,7 +203,6 @@ public class HoodieHFileDataBlock extends HoodieDataBlock {
     final HoodieAvroHFileReader reader =
              new HoodieAvroHFileReader(inlineConf, inlinePath, new CacheConfig(inlineConf), inlinePath.getFileSystem(inlineConf));
 
-    HoodieRecord.Mapper<IndexedRecord, IndexedRecord> mapper = HoodieAvroIndexedRecord::new;
     // Get writer's schema from the header
     final ClosableIterator<IndexedRecord> recordIterator =
         fullKey ? reader.getRecordsByKeysIterator(sortedKeys, readerSchema) : reader.getRecordsByKeyPrefixIterator(sortedKeys, readerSchema);
@@ -217,7 +215,8 @@ public class HoodieHFileDataBlock extends HoodieDataBlock {
 
       @Override
       public HoodieRecord next() {
-        return mapper.apply(recordIterator.next());
+        // TODO Does Hfile need to be converted to internalRow
+        return new HoodieAvroIndexedRecord(recordIterator.next());
       }
 
       @Override

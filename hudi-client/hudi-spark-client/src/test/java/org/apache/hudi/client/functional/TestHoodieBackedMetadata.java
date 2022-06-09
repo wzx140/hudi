@@ -983,7 +983,7 @@ public class TestHoodieBackedMetadata extends TestHoodieMetadataBase {
         while (logFileReader.hasNext()) {
           HoodieLogBlock logBlock = logFileReader.next();
           if (logBlock instanceof HoodieDataBlock) {
-            try (ClosableIterator<HoodieRecord> recordItr = ((HoodieDataBlock) logBlock).getRecordIterator()) {
+            try (ClosableIterator<HoodieRecord> recordItr = ((HoodieDataBlock) logBlock).getRecordIterator(new HashMap<>())) {
               recordItr.forEachRemaining(indexRecord -> {
                 final GenericRecord record = (GenericRecord) indexRecord.getData();
                 if (enableMetaFields) {
@@ -2498,7 +2498,7 @@ public class TestHoodieBackedMetadata extends TestHoodieMetadataBase {
         while (logFileReader.hasNext()) {
           HoodieLogBlock logBlock = logFileReader.next();
           if (logBlock instanceof HoodieDataBlock) {
-            try (ClosableIterator<HoodieRecord> recordItr = ((HoodieDataBlock) logBlock).getRecordIterator()) {
+            try (ClosableIterator<HoodieRecord> recordItr = ((HoodieDataBlock) logBlock).getRecordIterator(new HashMap<>())) {
               recordItr.forEachRemaining(indexRecord -> {
                 final GenericRecord record = (GenericRecord) indexRecord.getData();
                 final GenericRecord colStatsRecord = (GenericRecord) record.get(HoodieMetadataPayload.SCHEMA_FIELD_ID_COLUMN_STATS);
