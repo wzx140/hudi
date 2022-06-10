@@ -20,11 +20,10 @@ package org.apache.hudi.table.action.commit;
 
 import org.apache.avro.Schema;
 import org.apache.avro.SchemaCompatibility;
-import org.apache.avro.generic.GenericRecord;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hudi.common.model.HoodieBaseFile;
-import org.apache.hudi.common.model.HoodieRecordPayload;
+import org.apache.hudi.common.model.HoodieRecord;
 import org.apache.hudi.common.table.HoodieTableMetaClient;
 import org.apache.hudi.common.util.ClosableIterator;
 import org.apache.hudi.common.util.InternalSchemaCache;
@@ -45,10 +44,14 @@ import org.apache.hudi.io.storage.HoodieFileReaderFactory;
 import org.apache.hudi.table.HoodieTable;
 import org.apache.hudi.util.QueueBasedExecutorFactory;
 
+import org.apache.log4j.LogManager;
+import org.apache.log4j.Logger;
+
 import java.io.IOException;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.Objects;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -56,7 +59,9 @@ import java.util.stream.Collectors;
 import static org.apache.hudi.avro.AvroSchemaUtils.isStrictProjectionOf;
 import static org.apache.hudi.avro.HoodieAvroUtils.rewriteRecordWithNewSchema;
 
-public class HoodieMergeHelper<T extends HoodieRecordPayload> extends BaseMergeHelper {
+public class HoodieMergeHelper<T> extends BaseMergeHelper {
+
+  private static final Logger LOG = LogManager.getLogger(HoodieMergeHelper.class);
 
   private HoodieMergeHelper() {
   }
@@ -76,14 +81,16 @@ public class HoodieMergeHelper<T extends HoodieRecordPayload> extends BaseMergeH
     HoodieBaseFile baseFile = mergeHandle.baseFileForMerge();
 
     Configuration hadoopConf = new Configuration(table.getHadoopConf());
-    HoodieFileReader<GenericRecord> reader = HoodieFileReaderFactory.getFileReader(hadoopConf, mergeHandle.getOldFilePath());
+    HoodieFileReader reader = HoodieFileReaderFactory
+        .getReaderFactory(table.getConfig().getRecordMerger().getRecordType())
+        .getFileReader(hadoopConf, mergeHandle.getOldFilePath());
 
     Schema writerSchema = mergeHandle.getWriterSchemaWithMetaFields();
     Schema readerSchema = reader.getSchema();
 
     // In case Advanced Schema Evolution is enabled we might need to rewrite currently
     // persisted records to adhere to an evolved schema
-    Option<Function<GenericRecord, GenericRecord>> schemaEvolutionTransformerOpt =
+    Option<Function<HoodieRecord, HoodieRecord>> schemaEvolutionTransformerOpt =
         composeSchemaEvolutionTransformer(writerSchema, baseFile, writeConfig, table.getMetaClient());
 
     // Check whether the writer schema is simply a projection of the file's one, ie
@@ -97,15 +104,16 @@ public class HoodieMergeHelper<T extends HoodieRecordPayload> extends BaseMergeH
         || !isPureProjection
         || baseFile.getBootstrapBaseFile().isPresent();
 
-    HoodieExecutor<GenericRecord, GenericRecord, Void> wrapper = null;
+    HoodieExecutor<HoodieRecord, HoodieRecord, Void> wrapper = null;
 
     try {
-      Iterator<GenericRecord> recordIterator;
+      Iterator<HoodieRecord> recordIterator;
 
       // In case writer's schema is simply a projection of the reader's one we can read
       // the records in the projected schema directly
-      ClosableIterator<GenericRecord> baseFileRecordIterator =
+      ClosableIterator<HoodieRecord> baseFileRecordIterator =
           reader.getRecordIterator(isPureProjection ? writerSchema : readerSchema);
+      Schema iteratorSchema;
       if (baseFile.getBootstrapBaseFile().isPresent()) {
         Path bootstrapFilePath = new Path(baseFile.getBootstrapBaseFile().get().getPath());
         recordIterator = getMergingIterator(table, mergeHandle, bootstrapFilePath, baseFileRecordIterator);
@@ -114,11 +122,15 @@ public class HoodieMergeHelper<T extends HoodieRecordPayload> extends BaseMergeH
             schemaEvolutionTransformerOpt.get());
       } else {
         recordIterator = baseFileRecordIterator;
+        iteratorSchema = isPureProjection ? writerSchema : readerSchema;
       }
 
       wrapper = QueueBasedExecutorFactory.create(writeConfig, recordIterator, new UpdateHandler(mergeHandle), record -> {
+        // NOTE: Record have to be cloned here to make sure if it holds low-level engine-specific
+        //       payload pointing into a shared, mutable (underlying) buffer we get a clean copy of
+        //       it since these records will be put into queue of QueueBasedExecutorFactory.
         if (shouldRewriteInWriterSchema) {
-          return rewriteRecordWithNewSchema(record, writerSchema);
+          return record.rewriteRecordWithNewSchema(iteratorSchema, writeConfig.getProps(), writerSchema);
         } else {
           return record;
         }
@@ -139,7 +151,7 @@ public class HoodieMergeHelper<T extends HoodieRecordPayload> extends BaseMergeH
     }
   }
 
-  private Option<Function<GenericRecord, GenericRecord>> composeSchemaEvolutionTransformer(Schema writerSchema,
+  private Option<Function<HoodieRecord, HoodieRecord>> composeSchemaEvolutionTransformer(Schema writerSchema,
                                                                                            HoodieBaseFile baseFile,
                                                                                            HoodieWriteConfig writeConfig,
                                                                                            HoodieTableMetaClient metaClient) {
@@ -174,7 +186,7 @@ public class HoodieMergeHelper<T extends HoodieRecordPayload> extends BaseMergeH
           || SchemaCompatibility.checkReaderWriterCompatibility(newWriterSchema, writeSchemaFromFile).getType() == org.apache.avro.SchemaCompatibility.SchemaCompatibilityType.COMPATIBLE;
       if (needToReWriteRecord) {
         Map<String, String> renameCols = InternalSchemaUtils.collectRenameCols(writeInternalSchema, querySchema);
-        return Option.of(record -> rewriteRecordWithNewSchema(record, newWriterSchema, renameCols));
+        return Option.of(record -> record.rewriteRecordWithNewSchema(writerSchema, writeConfig.getProps(), newWriterSchema, renameCols));
       } else {
         return Option.empty();
       }

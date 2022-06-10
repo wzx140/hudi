@@ -18,16 +18,19 @@
 
 package org.apache.hudi.table.action.commit;
 
-import org.apache.avro.generic.GenericRecord;
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.Path;
-import org.apache.hudi.avro.HoodieAvroUtils;
 import org.apache.hudi.client.utils.MergingIterator;
+import org.apache.hudi.common.model.HoodieBaseFile;
+import org.apache.hudi.common.model.HoodieRecord;
+import org.apache.hudi.common.model.HoodieRecord.HoodieRecordType;
 import org.apache.hudi.common.util.queue.IteratorBasedQueueConsumer;
 import org.apache.hudi.io.HoodieMergeHandle;
 import org.apache.hudi.io.storage.HoodieFileReader;
 import org.apache.hudi.io.storage.HoodieFileReaderFactory;
 import org.apache.hudi.table.HoodieTable;
+
+import org.apache.avro.Schema;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.Path;
 
 import java.io.IOException;
 import java.util.Iterator;
@@ -49,23 +52,23 @@ public abstract class BaseMergeHelper {
    * Create Parquet record iterator that provides a stitched view of record read from skeleton and bootstrap file.
    * Skeleton file is a representation of the bootstrap file inside the table, with just the bare bone fields needed
    * for indexing, writing and other functionality.
-   *
    */
-  protected Iterator<GenericRecord> getMergingIterator(HoodieTable<?, ?, ?, ?> table,
-                                                       HoodieMergeHandle<?, ?, ?, ?> mergeHandle,
-                                                       Path bootstrapFilePath,
-                                                       Iterator<GenericRecord> recordIterator) throws IOException {
+  protected Iterator<HoodieRecord> getMergingIterator(HoodieTable<?, ?, ?, ?> table,
+      HoodieMergeHandle<?, ?, ?, ?> mergeHandle,
+      Path bootstrapFilePath,
+      Iterator<HoodieRecord> recordIterator) throws IOException {
     Configuration bootstrapFileConfig = new Configuration(table.getHadoopConf());
-    HoodieFileReader<GenericRecord> bootstrapReader =
-        HoodieFileReaderFactory.getFileReader(bootstrapFileConfig, bootstrapFilePath);
+    HoodieRecordType recordType = table.getConfig().getRecordMerger().getRecordType();
+    HoodieFileReader<HoodieRecord> bootstrapReader =
+        HoodieFileReaderFactory.getReaderFactory(recordType).getFileReader(bootstrapFileConfig, bootstrapFilePath);
     return new MergingIterator<>(recordIterator, bootstrapReader.getRecordIterator(),
-        (inputRecordPair) -> HoodieAvroUtils.stitchRecords(inputRecordPair.getLeft(), inputRecordPair.getRight(), mergeHandle.getWriterSchemaWithMetaFields()));
+        (inputRecordPair) -> oneRecord.joinWith(otherRecord, mergeHandle.getWriterSchemaWithMetaFields()));
   }
 
   /**
    * Consumer that dequeues records from queue and sends to Merge Handle.
    */
-  protected static class UpdateHandler extends IteratorBasedQueueConsumer<GenericRecord, Void> {
+  protected static class UpdateHandler extends IteratorBasedQueueConsumer<HoodieRecord, Void> {
 
     private final HoodieMergeHandle upsertHandle;
 
@@ -74,7 +77,7 @@ public abstract class BaseMergeHelper {
     }
 
     @Override
-    public void consumeOneRecord(GenericRecord record) {
+    public void consumeOneRecord(HoodieRecord record) {
       upsertHandle.write(record);
     }
 

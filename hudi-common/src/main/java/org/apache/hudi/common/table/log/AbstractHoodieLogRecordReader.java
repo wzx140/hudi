@@ -18,12 +18,14 @@
 
 package org.apache.hudi.common.table.log;
 
+import org.apache.hudi.common.config.TypedProperties;
 import org.apache.hudi.common.model.DeleteRecord;
-import org.apache.hudi.common.model.HoodieAvroRecord;
+import org.apache.hudi.common.model.HoodieAvroRecordMerger;
 import org.apache.hudi.common.model.HoodieLogFile;
 import org.apache.hudi.common.model.HoodiePayloadProps;
 import org.apache.hudi.common.model.HoodieRecord;
-import org.apache.hudi.common.model.HoodieRecordPayload;
+import org.apache.hudi.common.model.HoodieRecord.HoodieRecordType;
+import org.apache.hudi.common.model.HoodieRecordMerger;
 import org.apache.hudi.common.table.HoodieTableConfig;
 import org.apache.hudi.common.table.HoodieTableMetaClient;
 import org.apache.hudi.common.table.log.block.HoodieAvroDataBlock;
@@ -48,8 +50,6 @@ import org.apache.hudi.internal.schema.action.InternalSchemaMerger;
 import org.apache.hudi.internal.schema.convert.AvroInternalSchemaConverter;
 
 import org.apache.avro.Schema;
-import org.apache.avro.generic.GenericRecord;
-import org.apache.avro.generic.IndexedRecord;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.log4j.LogManager;
@@ -59,7 +59,6 @@ import java.io.IOException;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -72,6 +71,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static org.apache.hudi.avro.HoodieAvroUtils.rewriteRecordWithNewSchema;
+import static org.apache.hudi.common.util.TypeUtils.unsafeCast;
 import static org.apache.hudi.common.table.log.block.HoodieCommandBlock.HoodieCommandBlockTypeEnum.ROLLBACK_BLOCK;
 import static org.apache.hudi.common.table.log.block.HoodieLogBlock.HeaderMetadataType.COMPACTED_BLOCK_TIMES;
 import static org.apache.hudi.common.table.log.block.HoodieLogBlock.HeaderMetadataType.INSTANT_TIME;
@@ -100,12 +100,14 @@ public abstract class AbstractHoodieLogRecordReader {
   // Latest valid instant time
   // Log-Blocks belonging to inflight delta-instants are filtered-out using this high-watermark.
   private final String latestInstantTime;
-  private final HoodieTableMetaClient hoodieTableMetaClient;
+  protected final HoodieTableMetaClient hoodieTableMetaClient;
   // Merge strategy to use when combining records from log
   private final String payloadClassFQN;
   // preCombine field
-  private final String preCombineField;
-  private final Properties payloadProps = new Properties();
+  protected final String preCombineField;
+  // Stateless component for merging records
+  protected final HoodieRecordMerger recordMerger;
+  private final TypedProperties payloadProps;
   // simple key gen fields
   private Option<Pair<String, String>> simpleKeyGenFields = Option.empty();
   // Log File Paths
@@ -148,6 +150,8 @@ public abstract class AbstractHoodieLogRecordReader {
   private Option<String> partitionName;
   // Populate meta fields for the records
   private boolean populateMetaFields = true;
+  // Record type read from log block
+  protected final HoodieRecordType recordType;
   // Collect all the block instants after scanning all the log files.
   private List<String> validBlockInstants = new ArrayList<>();
   // Use scanV2 method.
@@ -157,16 +161,17 @@ public abstract class AbstractHoodieLogRecordReader {
                                           Schema readerSchema,
                                           String latestInstantTime, boolean readBlocksLazily, boolean reverseReader,
                                           int bufferSize, Option<InstantRange> instantRange,
-                                          boolean withOperationField) {
+                                          boolean withOperationField, HoodieRecordMerger recordMerger) {
     this(fs, basePath, logFilePaths, readerSchema, latestInstantTime, readBlocksLazily, reverseReader, bufferSize,
-        instantRange, withOperationField, true, Option.empty(), InternalSchema.getEmptyInternalSchema(), false);
+        instantRange, withOperationField, true, Option.empty(), InternalSchema.getEmptyInternalSchema(), false, recordMerger);
   }
 
   protected AbstractHoodieLogRecordReader(FileSystem fs, String basePath, List<String> logFilePaths,
                                           Schema readerSchema, String latestInstantTime, boolean readBlocksLazily,
                                           boolean reverseReader, int bufferSize, Option<InstantRange> instantRange,
                                           boolean withOperationField, boolean forceFullScan,
-                                          Option<String> partitionName, InternalSchema internalSchema, boolean useScanV2) {
+                                          Option<String> partitionName, InternalSchema internalSchema,
+                                          boolean useScanV2, HoodieRecordMerger recordMerger) {
     this.readerSchema = readerSchema;
     this.latestInstantTime = latestInstantTime;
     this.hoodieTableMetaClient = HoodieTableMetaClient.builder().setConf(fs.getConf()).setBasePath(basePath).build();
@@ -174,9 +179,13 @@ public abstract class AbstractHoodieLogRecordReader {
     HoodieTableConfig tableConfig = this.hoodieTableMetaClient.getTableConfig();
     this.payloadClassFQN = tableConfig.getPayloadClass();
     this.preCombineField = tableConfig.getPreCombineField();
+    // Log scanner merge log with precombine
+    TypedProperties props = HoodieAvroRecordMerger.Config.withLegacyOperatingModePreCombining(new Properties());
     if (this.preCombineField != null) {
-      this.payloadProps.setProperty(HoodiePayloadProps.PAYLOAD_ORDERING_FIELD_PROP_KEY, this.preCombineField);
+      props.setProperty(HoodiePayloadProps.PAYLOAD_ORDERING_FIELD_PROP_KEY, this.preCombineField);
     }
+    this.payloadProps = props;
+    this.recordMerger = recordMerger;
     this.totalLogFiles.addAndGet(logFilePaths.size());
     this.logFilePaths = logFilePaths;
     this.reverseReader = reverseReader;
@@ -197,6 +206,7 @@ public abstract class AbstractHoodieLogRecordReader {
           Pair.of(tableConfig.getRecordKeyFieldProp(), tableConfig.getPartitionFieldProp()));
     }
     this.partitionName = partitionName;
+    this.recordType = recordMerger.getRecordType();
   }
 
   protected String getKeyField() {
@@ -629,39 +639,18 @@ public abstract class AbstractHoodieLogRecordReader {
    * handle it.
    */
   private void processDataBlock(HoodieDataBlock dataBlock, Option<KeySpec> keySpecOpt) throws Exception {
-    try (ClosableIterator<IndexedRecord> recordIterator = getRecordsIterator(dataBlock, keySpecOpt)) {
+    try (ClosableIterator<HoodieRecord> recordIterator = getRecordsIterator(dataBlock, keySpecOpt, recordType)) {
       while (recordIterator.hasNext()) {
-        processNextRecord(createHoodieRecord(recordIterator.next(), this.hoodieTableMetaClient.getTableConfig(), this.payloadClassFQN,
-            this.preCombineField, this.withOperationField, this.simpleKeyGenFields, this.partitionName));
+        HoodieRecord completedRecord = record.wrapIntoHoodieRecordPayloadWithParams(schema, hoodieTableMetaClient.getTableConfig().getProps(), this.simpleKeyGenFields,
+            this.withOperationField, this.partitionName, getPopulateMetaFields());
+        processNextRecord(completedRecord);
         totalLogRecords.incrementAndGet();
       }
     }
   }
 
-  /**
-   * Create @{@link HoodieRecord} from the @{@link IndexedRecord}.
-   *
-   * @param rec                - IndexedRecord to create the HoodieRecord from
-   * @param hoodieTableConfig  - Table config
-   * @param payloadClassFQN    - Payload class fully qualified name
-   * @param preCombineField    - PreCombine field
-   * @param withOperationField - Whether operation field is enabled
-   * @param simpleKeyGenFields - Key generator fields when populate meta fields is tuened off
-   * @param partitionName      - Partition name
-   * @return HoodieRecord created from the IndexedRecord
-   */
-  protected HoodieAvroRecord<?> createHoodieRecord(final IndexedRecord rec, final HoodieTableConfig hoodieTableConfig,
-                                               final String payloadClassFQN, final String preCombineField,
-                                               final boolean withOperationField,
-                                               final Option<Pair<String, String>> simpleKeyGenFields,
-                                               final Option<String> partitionName) {
-    if (this.populateMetaFields) {
-      return SpillableMapUtils.convertToHoodieRecordPayload((GenericRecord) rec, payloadClassFQN,
-          preCombineField, withOperationField);
-    } else {
-      return SpillableMapUtils.convertToHoodieRecordPayload((GenericRecord) rec, payloadClassFQN,
-          preCombineField, simpleKeyGenFields.get(), withOperationField, partitionName);
-    }
+  protected boolean getPopulateMetaFields() {
+    return this.populateMetaFields;
   }
 
   /**
@@ -669,7 +658,7 @@ public abstract class AbstractHoodieLogRecordReader {
    *
    * @param hoodieRecord Hoodie Record to process
    */
-  protected abstract void processNextRecord(HoodieRecord<? extends HoodieRecordPayload> hoodieRecord) throws Exception;
+  protected abstract <T> void processNextRecord(HoodieRecord<T> hoodieRecord) throws Exception;
 
   /**
    * Process next deleted record.
@@ -750,7 +739,7 @@ public abstract class AbstractHoodieLogRecordReader {
     return withOperationField;
   }
 
-  protected Properties getPayloadProps() {
+  protected TypedProperties getPayloadProps() {
     return payloadProps;
   }
 
@@ -851,6 +840,10 @@ public abstract class AbstractHoodieLogRecordReader {
     }
 
     public Builder withOperationField(boolean withOperationField) {
+      throw new UnsupportedOperationException();
+    }
+
+    public Builder withRecordMerger(HoodieRecordMerger recordMerger) {
       throw new UnsupportedOperationException();
     }
 
