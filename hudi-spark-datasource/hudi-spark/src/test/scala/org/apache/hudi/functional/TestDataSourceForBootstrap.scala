@@ -33,7 +33,9 @@ import org.junit.jupiter.api.io.TempDir
 import org.junit.jupiter.api.{AfterEach, BeforeEach, Test}
 import java.time.Instant
 import java.util.Collections
-
+import org.apache.hudi.common.model.HoodieRecord.HoodieRecordType
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.{EnumSource, ValueSource}
 import scala.collection.JavaConverters._
 
 class TestDataSourceForBootstrap {
@@ -88,7 +90,9 @@ class TestDataSourceForBootstrap {
     }
   }
 
-  @Test def testMetadataBootstrapCOWNonPartitioned(): Unit = {
+  @ParameterizedTest
+  @EnumSource(value = classOf[HoodieRecordType], names = Array("AVRO", "SPARK"))
+  def testMetadataBootstrapCOWNonPartitioned(): Unit = {
     val timestamp = Instant.now.toEpochMilli
     val jsc = JavaSparkContext.fromSparkContext(spark.sparkContext)
 

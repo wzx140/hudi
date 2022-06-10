@@ -21,6 +21,7 @@ package org.apache.hudi.functional
 
 import org.apache.hudi.common.config.HoodieMetadataConfig
 import org.apache.hudi.common.fs.FSUtils
+import org.apache.hudi.common.model.HoodieRecord.HoodieRecordType
 import org.apache.hudi.common.table.HoodieTableMetaClient
 import org.apache.hudi.common.table.timeline.{HoodieInstant, HoodieTimeline}
 import org.apache.hudi.common.testutils.HoodieTestDataGenerator
@@ -29,14 +30,13 @@ import org.apache.hudi.config.HoodieWriteConfig
 import org.apache.hudi.keygen.TimestampBasedKeyGenerator
 import org.apache.hudi.keygen.constant.KeyGeneratorOptions.Config
 import org.apache.hudi.testutils.SparkClientFunctionalTestHarness
-import org.apache.hudi.{DataSourceReadOptions, DataSourceWriteOptions, HoodieDataSourceHelpers}
+import org.apache.hudi.{DataSourceReadOptions, DataSourceWriteOptions, HoodieDataSourceHelpers, HoodieSparkRecordCombiningEngine}
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions.{col, lit}
 import org.junit.jupiter.api.Assertions.{assertEquals, assertFalse, assertTrue}
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.params.ParameterizedTest
-import org.junit.jupiter.params.provider.{CsvSource, ValueSource}
-
+import org.junit.jupiter.params.provider.CsvSource
 import scala.collection.JavaConversions._
 
 
@@ -55,19 +55,29 @@ class TestCOWDataSourceStorage extends SparkClientFunctionalTestHarness {
     DataSourceWriteOptions.HIVE_STYLE_PARTITIONING.key -> "false"
   )
 
+  val sparkRecordOpts = Map(
+    HoodieWriteConfig.RECORD_TYPE.key() -> HoodieRecordType.SPARK.name(),
+    HoodieWriteConfig.COMBINE_ENGINE_CLASS_NAME.key() -> classOf[HoodieSparkRecordCombiningEngine].getName
+  )
+
   val verificationCol: String = "driver"
   val updatedVerificationVal: String = "driver_update"
 
-  @ParameterizedTest
   @CsvSource(value = Array(
-    "true|org.apache.hudi.keygen.SimpleKeyGenerator|_row_key",
-    "true|org.apache.hudi.keygen.ComplexKeyGenerator|_row_key,nation.bytes",
-    "true|org.apache.hudi.keygen.TimestampBasedKeyGenerator|_row_key",
-    "false|org.apache.hudi.keygen.SimpleKeyGenerator|_row_key",
-    "false|org.apache.hudi.keygen.ComplexKeyGenerator|_row_key,nation.bytes",
-    "false|org.apache.hudi.keygen.TimestampBasedKeyGenerator|_row_key"
+    "true|org.apache.hudi.keygen.SimpleKeyGenerator|_row_key|AVRO",
+    "true|org.apache.hudi.keygen.ComplexKeyGenerator|_row_key,nation.bytes|AVRO",
+    "true|org.apache.hudi.keygen.TimestampBasedKeyGenerator|_row_key|AVRO",
+    "false|org.apache.hudi.keygen.SimpleKeyGenerator|_row_key|AVRO",
+    "false|org.apache.hudi.keygen.ComplexKeyGenerator|_row_key,nation.bytes|AVRO",
+    "false|org.apache.hudi.keygen.TimestampBasedKeyGenerator|_row_key|AVRO",
+    "true|org.apache.hudi.keygen.SimpleKeyGenerator|_row_key|SPARK",
+    "true|org.apache.hudi.keygen.ComplexKeyGenerator|_row_key,nation.bytes|SPARK",
+    "true|org.apache.hudi.keygen.TimestampBasedKeyGenerator|_row_key|SPARK",
+    "false|org.apache.hudi.keygen.SimpleKeyGenerator|_row_key|SPARK",
+    "false|org.apache.hudi.keygen.ComplexKeyGenerator|_row_key,nation.bytes|SPARK",
+    "false|org.apache.hudi.keygen.TimestampBasedKeyGenerator|_row_key|SPARK"
   ), delimiter = '|')
-  def testCopyOnWriteStorage(isMetadataEnabled: Boolean, keyGenClass: String, recordKeys: String): Unit = {
+  def testCopyOnWriteStorage(isMetadataEnabled: Boolean, keyGenClass: String, recordKeys: String, recordType: HoodieRecordType): Unit = {
     var options: Map[String, String] = commonOpts +
       (HoodieMetadataConfig.ENABLE.key -> String.valueOf(isMetadataEnabled)) +
       (DataSourceWriteOptions.KEYGENERATOR_CLASS_NAME.key() -> keyGenClass) +
@@ -78,6 +88,9 @@ class TestCOWDataSourceStorage extends SparkClientFunctionalTestHarness {
       options += Config.TIMESTAMP_TYPE_FIELD_PROP -> "DATE_STRING"
       options += Config.TIMESTAMP_INPUT_DATE_FORMAT_PROP -> "yyyy/MM/dd"
       options += Config.TIMESTAMP_OUTPUT_DATE_FORMAT_PROP -> "yyyyMMdd"
+    }
+    if (recordType == HoodieRecordType.SPARK) {
+      options ++= sparkRecordOpts
     }
     val dataGen = new HoodieTestDataGenerator(0xDEED)
     val fs = FSUtils.getFs(basePath, spark.sparkContext.hadoopConfiguration)
@@ -222,8 +235,17 @@ class TestCOWDataSourceStorage extends SparkClientFunctionalTestHarness {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = Array("insert_overwrite", "delete_partition"))
-  def testArchivalWithReplaceCommitActions(writeOperation: String): Unit = {
+  @CsvSource(value = Array(
+    "insert_overwrite|AVRO",
+    "insert_overwrite|AVRO",
+    "delete_partition|SPARK",
+    "delete_partition|SPARK"
+  ), delimiter = '|')
+  def testArchivalWithReplaceCommitActions(writeOperation: String, recordType: HoodieRecordType): Unit = {
+    var options: Map[String, String] = commonOpts
+    if (recordType == HoodieRecordType.SPARK) {
+      options ++= sparkRecordOpts
+    }
 
     val dataGen = new HoodieTestDataGenerator()
     // use this to generate records only for certain partitions.
@@ -236,7 +258,7 @@ class TestCOWDataSourceStorage extends SparkClientFunctionalTestHarness {
     val partition1RecordCount = inputDF.filter(row => row.getAs("partition_path")
       .equals(HoodieTestDataGenerator.DEFAULT_FIRST_PARTITION_PATH)).count()
     inputDF.write.format("hudi")
-      .options(commonOpts)
+      .options(options)
       .option("hoodie.keep.min.commits", "2")
       .option("hoodie.keep.max.commits", "3")
       .option("hoodie.cleaner.commits.retained", "1")
@@ -248,7 +270,7 @@ class TestCOWDataSourceStorage extends SparkClientFunctionalTestHarness {
     assertRecordCount(basePath, 100)
 
     // issue delete partition to partition1
-    writeRecords(2, dataGenPartition1, writeOperation, basePath)
+    writeRecords(2, dataGenPartition1, writeOperation, basePath, options)
 
     val expectedRecCount = if (writeOperation.equals(DataSourceWriteOptions.INSERT_OVERWRITE_OPERATION_OPT_VAL)) {
       200 - partition1RecordCount
@@ -259,7 +281,7 @@ class TestCOWDataSourceStorage extends SparkClientFunctionalTestHarness {
 
     // add more data to partition2.
     for (i <- 3 to 7) {
-      writeRecords(i, dataGenPartition2, DataSourceWriteOptions.BULK_INSERT_OPERATION_OPT_VAL, basePath)
+      writeRecords(i, dataGenPartition2, DataSourceWriteOptions.BULK_INSERT_OPERATION_OPT_VAL, basePath, options)
     }
 
     assertRecordCount(basePath, expectedRecCount + 500)
@@ -275,11 +297,11 @@ class TestCOWDataSourceStorage extends SparkClientFunctionalTestHarness {
       .filter(action => action.equals(HoodieTimeline.REPLACE_COMMIT_ACTION)).size > 0)
   }
 
-  def writeRecords(commitTime: Int, dataGen: HoodieTestDataGenerator, writeOperation: String, basePath: String): Unit = {
+  def writeRecords(commitTime: Int, dataGen: HoodieTestDataGenerator, writeOperation: String, basePath: String, options: Map[String, String]): Unit = {
     val records = recordsToStrings(dataGen.generateInserts("%05d".format(commitTime), 100)).toList
     val inputDF = spark.read.json(spark.sparkContext.parallelize(records, 2))
     inputDF.write.format("hudi")
-      .options(commonOpts)
+      .options(options)
       .option("hoodie.keep.min.commits", "2")
       .option("hoodie.keep.max.commits", "3")
       .option("hoodie.cleaner.commits.retained", "1")
