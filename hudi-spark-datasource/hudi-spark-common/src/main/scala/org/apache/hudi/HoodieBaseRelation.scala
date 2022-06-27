@@ -34,7 +34,7 @@ import org.apache.hudi.common.model.{FileSlice, HoodieFileFormat, HoodieRecord}
 import org.apache.hudi.common.table.timeline.{HoodieInstant, HoodieTimeline}
 import org.apache.hudi.common.table.view.HoodieTableFileSystemView
 import org.apache.hudi.common.table.{HoodieTableConfig, HoodieTableMetaClient, TableSchemaResolver}
-import org.apache.hudi.common.util.StringUtils
+import org.apache.hudi.common.util.{ConfigUtils, HoodieRecordUtils, StringUtils}
 import org.apache.hudi.common.util.StringUtils.isNullOrEmpty
 import org.apache.hudi.common.util.ValidationUtils.checkState
 import org.apache.hudi.internal.schema.convert.AvroInternalSchemaConverter
@@ -56,9 +56,9 @@ import org.apache.spark.sql.sources.{BaseRelation, Filter, PrunedFilteredScan}
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.apache.spark.sql.{HoodieCatalystExpressionUtils, Row, SQLContext, SparkSession}
 import org.apache.spark.unsafe.types.UTF8String
-
 import java.net.URI
 import java.util.Locale
+import org.apache.hudi.config.HoodieWriteConfig
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
@@ -74,7 +74,7 @@ case class HoodieTableState(tablePath: String,
                             usesVirtualKeys: Boolean,
                             recordPayloadClassName: String,
                             metadataConfig: HoodieMetadataConfig,
-                            mergeClass: String)
+                            mergerStrategy: String)
 
 /**
  * Hoodie BaseRelation which extends [[PrunedFilteredScan]].
@@ -459,7 +459,8 @@ abstract class HoodieBaseRelation(val sqlContext: SQLContext,
       usesVirtualKeys = !tableConfig.populateMetaFields(),
       recordPayloadClassName = tableConfig.getPayloadClass,
       metadataConfig = fileIndex.metadataConfig,
-      mergeClass = tableConfig.getMergeClass
+      mergerStrategy = optParams.getOrElse(HoodieWriteConfig.MERGER_STRATEGY.key(),
+        HoodieWriteConfig.MERGER_STRATEGY.defaultValue())
     )
   }
 
@@ -736,7 +737,7 @@ object HoodieBaseRelation extends SparkAdapterSupport {
       val requiredAvroSchema = new Schema.Parser().parse(requiredDataSchema.avroSchemaStr)
       val avroToRowConverter = AvroConversionUtils.createAvroToInternalRowConverter(requiredAvroSchema, requiredRowSchema)
 
-      reader.getRecordIterator(requiredAvroSchema).asScala
+      reader.getIndexedRecordIterator(requiredAvroSchema).asScala
         .map(record => {
           avroToRowConverter.apply(record.asInstanceOf[GenericRecord]).get
         })
