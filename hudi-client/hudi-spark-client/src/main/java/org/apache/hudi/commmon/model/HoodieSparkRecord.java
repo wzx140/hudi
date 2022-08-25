@@ -254,6 +254,10 @@ public class HoodieSparkRecord extends HoodieRecord<InternalRow> {
     return structType;
   }
 
+  public void setStructType(StructType structType) {
+    this.structType = structType;
+  }
+
   private UTF8String[] extractMetaField(StructType structType) {
     return HOODIE_META_COLUMNS_WITH_OPERATION.stream()
         .filter(f -> HoodieDefaultCatalystExpressionUtils.existField(structType, f))
