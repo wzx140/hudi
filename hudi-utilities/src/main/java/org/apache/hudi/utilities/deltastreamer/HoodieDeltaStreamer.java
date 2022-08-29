@@ -271,9 +271,9 @@ public class HoodieDeltaStreamer implements Serializable {
         + "a GenericRecord. Implement your own, if you want to do something other than overwriting existing value")
     public String payloadClassName = OverwriteWithLatestAvroPayload.class.getName();
 
-    @Parameter(names = {"--merge-class"}, description = "Implements of HoodieMerge, that defines how to merge two records."
+    @Parameter(names = {"--merge-strategy"}, description = "Implements of HoodieMerge, that defines how to merge two records."
         + "Implement your own, if you want to implement specific record merge logic.")
-    public String mergeClassName = HoodieAvroRecordMerger.class.getName();
+    public String mergeStrategy = HoodieAvroRecordMerger.class.getName();
 
     @Parameter(names = {"--schemaprovider-class"}, description = "subclass of org.apache.hudi.utilities.schema"
         + ".SchemaProvider to attach schemas to input & target table data, built in options: "

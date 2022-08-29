@@ -460,7 +460,7 @@ abstract class HoodieBaseRelation(val sqlContext: SQLContext,
       recordPayloadClassName = tableConfig.getPayloadClass,
       metadataConfig = fileIndex.metadataConfig,
       mergerStrategy = optParams.getOrElse(HoodieWriteConfig.MERGER_STRATEGY.key(),
-        HoodieWriteConfig.MERGER_STRATEGY.defaultValue())
+        metaClient.getTableConfig.getMergeStrategy)
     )
   }
 
