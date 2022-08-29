@@ -32,7 +32,7 @@ import org.apache.hudi.keygen.SparkKeyGeneratorInterface;
 import org.apache.hudi.util.HoodieSparkRecordUtils;
 
 import org.apache.avro.Schema;
-import org.apache.spark.sql.HoodieDefaultCatalystExpressionUtils;
+import org.apache.spark.sql.HoodieCatalystExpressionUtils$;
 import org.apache.spark.sql.HoodieUnsafeRowUtils;
 import org.apache.spark.sql.HoodieUnsafeRowUtils.NestedFieldPath;
 import org.apache.spark.sql.catalyst.CatalystTypeConverters;
@@ -239,7 +239,7 @@ public class HoodieSparkRecord extends HoodieRecord<InternalRow> {
   @Override
   public Comparable<?> getOrderingValue(Properties props) {
     String orderingField = ConfigUtils.getOrderingField(props);
-    if (!HoodieDefaultCatalystExpressionUtils.existField(structType, orderingField)) {
+    if (!HoodieCatalystExpressionUtils$.MODULE$.existField(structType, orderingField)) {
       return 0;
     } else {
       NestedFieldPath nestedFieldPath = HoodieInternalRowUtils.getCachedPosList(structType,
@@ -260,7 +260,7 @@ public class HoodieSparkRecord extends HoodieRecord<InternalRow> {
 
   private UTF8String[] extractMetaField(StructType structType) {
     return HOODIE_META_COLUMNS_WITH_OPERATION.stream()
-        .filter(f -> HoodieDefaultCatalystExpressionUtils.existField(structType, f))
+        .filter(f -> HoodieCatalystExpressionUtils$.MODULE$.existField(structType, f))
         .map(UTF8String::fromString)
         .toArray(UTF8String[]::new);
   }

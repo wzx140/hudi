@@ -19,7 +19,6 @@
 package org.apache.hudi
 
 import java.nio.charset.StandardCharsets
-import java.util
 import java.util.HashMap
 import java.util.concurrent.ConcurrentHashMap
 import org.apache.avro.Schema
@@ -28,10 +27,10 @@ import org.apache.hudi.avro.HoodieAvroUtils.{createFullName, toJavaDate}
 import org.apache.hudi.common.model.HoodieRecord.HoodieMetadataField
 import org.apache.hudi.exception.HoodieException
 import org.apache.spark.sql.HoodieCatalystExpressionUtils
-import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, JoinedRow, MutableProjection, Projection}
+import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, JoinedRow, Projection}
 import org.apache.spark.sql.HoodieUnsafeRowUtils.NestedFieldPath
-import org.apache.spark.sql.{HoodieDefaultCatalystExpressionUtils, HoodieUnsafeRowUtils}
-import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, JoinedRow, Projection, UnsafeProjection}
+import org.apache.spark.sql.HoodieUnsafeRowUtils
+import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData, MapData}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.types._
@@ -71,7 +70,7 @@ object HoodieInternalRowUtils {
 
     for ((field, pos) <- newSchema.fields.zipWithIndex) {
       var oldValue: AnyRef = null
-      if (HoodieDefaultCatalystExpressionUtils.existField(oldSchema, field.name)) {
+      if (HoodieCatalystExpressionUtils.existField(oldSchema, field.name)) {
         val oldField = oldSchema(field.name)
         val oldPos = oldSchema.fieldIndex(field.name)
         oldValue = oldRecord.get(oldPos, oldField.dataType)
@@ -126,7 +125,7 @@ object HoodieInternalRowUtils {
           val oldStrucType = oldSchema.asInstanceOf[StructType]
           targetSchema.fields.zipWithIndex.foreach { case (field, i) =>
             fieldNames.push(field.name)
-            if (HoodieDefaultCatalystExpressionUtils.existField(oldStrucType, field.name)) {
+            if (HoodieCatalystExpressionUtils.existField(oldStrucType, field.name)) {
               val oldField = oldStrucType(field.name)
               val oldPos = oldStrucType.fieldIndex(field.name)
               helper(i) = rewriteRecordWithNewSchema(oldRow.get(oldPos, oldField.dataType), oldField.dataType, field.dataType, renameCols, fieldNames)
@@ -135,7 +134,7 @@ object HoodieInternalRowUtils {
               val colNamePartsFromOldSchema = renameCols.getOrDefault(fieldFullName, "").split("\\.")
               val lastColNameFromOldSchema = colNamePartsFromOldSchema(colNamePartsFromOldSchema.length - 1)
               // deal with rename
-              if (!HoodieDefaultCatalystExpressionUtils.existField(oldStrucType, field.name) && HoodieDefaultCatalystExpressionUtils.existField(oldStrucType, lastColNameFromOldSchema)) {
+              if (!HoodieCatalystExpressionUtils.existField(oldStrucType, field.name) && HoodieCatalystExpressionUtils.existField(oldStrucType, lastColNameFromOldSchema)) {
                 // find rename
                 val oldField = oldStrucType(lastColNameFromOldSchema)
                 val oldPos = oldStrucType.fieldIndex(lastColNameFromOldSchema)
@@ -232,7 +231,7 @@ object HoodieInternalRowUtils {
     val schemaPair = (from, to)
     val map = unsafeProjectionThreadLocal.get()
     if (!map.containsKey(schemaPair)) {
-      val projection = HoodieDefaultCatalystExpressionUtils.generateUnsafeProjection(from, to)
+      val projection = HoodieCatalystExpressionUtils.generateUnsafeProjection(from, to)
       map.put(schemaPair, projection)
     }
     map.get(schemaPair)
