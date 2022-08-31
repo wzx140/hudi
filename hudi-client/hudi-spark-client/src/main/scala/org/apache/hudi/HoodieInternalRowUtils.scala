@@ -21,7 +21,7 @@ package org.apache.hudi
 import java.nio.charset.StandardCharsets
 import java.util.HashMap
 import java.util.concurrent.ConcurrentHashMap
-import org.apache.avro.Schema
+import org.apache.avro.{Schema, SchemaNormalization}
 import org.apache.hbase.thirdparty.com.google.common.base.Supplier
 import org.apache.hudi.avro.HoodieAvroUtils.{createFullName, toJavaDate}
 import org.apache.hudi.common.model.HoodieRecord.HoodieMetadataField
@@ -48,9 +48,9 @@ object HoodieInternalRowUtils {
       override def get(): HashMap[StructType, UnsafeProjection] = new HashMap[StructType, UnsafeProjection]
     })
   val schemaMap = new ConcurrentHashMap[Schema, StructType]
+  val schemaFingerPrintMap = new ConcurrentHashMap[Long, StructType]
+  val fingerPrintSchemaMap = new ConcurrentHashMap[StructType, Long]
   val orderPosListMap = new ConcurrentHashMap[(StructType, String), NestedFieldPath]
-  val schemaDeserializeMap = new ConcurrentHashMap[String, StructType]()
-  val schemaSerializeMap = new ConcurrentHashMap[StructType, String]()
 
   /**
    * @see org.apache.hudi.avro.HoodieAvroUtils#stitchRecords(org.apache.avro.generic.GenericRecord, org.apache.avro.generic.GenericRecord, org.apache.avro.Schema)
@@ -237,27 +237,38 @@ object HoodieInternalRowUtils {
     map.get(schemaPair)
   }
 
-  def getCachedSerSchema(structType: StructType): String = {
-    if (!schemaSerializeMap.containsKey(structType)) {
-      schemaSerializeMap.put(structType, structType.json)
-    }
-    schemaSerializeMap.get(structType)
-  }
-
-  def getCachedDeserSchema(str: String): StructType = {
-    if (!schemaDeserializeMap.containsKey(str)) {
-      val structType = DataType.fromJson(str).asInstanceOf[StructType]
-      schemaDeserializeMap.put(str, structType)
-    }
-    schemaDeserializeMap.get(str)
-  }
-
   def getCachedSchema(schema: Schema): StructType = {
     if (!schemaMap.containsKey(schema)) {
       val structType = AvroConversionUtils.convertAvroSchemaToStructType(schema)
       schemaMap.put(schema, structType)
     }
     schemaMap.get(schema)
+  }
+
+  def getCachedSchemaFromFingerPrint(fingerPrint: Long): StructType = {
+    if (!schemaFingerPrintMap.containsKey(fingerPrint)) {
+      throw new IllegalArgumentException("Not exist " + fingerPrint)
+    }
+    schemaFingerPrintMap.get(fingerPrint)
+  }
+
+  def getCachedFingerPrintFromSchema(schema: StructType): Long = {
+    if (!fingerPrintSchemaMap.containsKey(schema)) {
+      throw new IllegalArgumentException("Not exist " + schema)
+    }
+    fingerPrintSchemaMap.get(schema)
+  }
+
+  def addCompressedSchema(schema: StructType): Unit ={
+    if (!fingerPrintSchemaMap.containsKey(schema)) {
+      val fingerPrint = SchemaNormalization.fingerprint64(schema.json.getBytes(StandardCharsets.UTF_8))
+      schemaFingerPrintMap.put(fingerPrint, schema)
+      fingerPrintSchemaMap.put(schema, fingerPrint)
+    }
+  }
+
+  def containsCompressedSchema(schema: StructType): Boolean = {
+    fingerPrintSchemaMap.containsKey(schema)
   }
 
   private def rewritePrimaryType(oldValue: Any, oldSchema: DataType, newSchema: DataType): Any = {

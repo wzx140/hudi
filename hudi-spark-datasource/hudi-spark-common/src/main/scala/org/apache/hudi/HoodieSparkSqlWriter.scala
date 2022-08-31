@@ -862,12 +862,14 @@ object HoodieSparkSqlWriter {
         val sparkKeyGenerator = keyGenerator.asInstanceOf[SparkKeyGeneratorInterface]
         val structType = HoodieInternalRowUtils.getCachedSchema(schema)
         val structTypeBC = SparkContext.getOrCreate().broadcast(structType)
+        HoodieInternalRowUtils.addCompressedSchema(structType)
         df.queryExecution.toRdd.map(row => {
           val internalRow = row.copy()
           val (processedRow, writeSchema) = getSparkProcessedRecord(partitionCols, internalRow, dropPartitionColumns, structTypeBC.value)
           val recordKey = sparkKeyGenerator.getRecordKey(internalRow, structTypeBC.value)
           val partitionPath = sparkKeyGenerator.getPartitionPath(internalRow, structTypeBC.value)
           val key = new HoodieKey(recordKey.toString, partitionPath.toString)
+          HoodieInternalRowUtils.addCompressedSchema(structTypeBC.value)
 
           new HoodieSparkRecord(key, processedRow, writeSchema)
         }).toJavaRDD().asInstanceOf[JavaRDD[HoodieRecord[_]]]
