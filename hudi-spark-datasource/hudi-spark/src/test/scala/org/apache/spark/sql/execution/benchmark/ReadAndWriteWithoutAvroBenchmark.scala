@@ -92,7 +92,7 @@ object ReadAndWriteWithoutAvroBenchmark extends HoodieBenchmarkBase {
          |tblproperties(
          |  primaryKey = 'id',
          |  type = '$tableType',
-         |  ${HoodieWriteConfig.MERGER_STRATEGY.key} = '$mergerType',
+         |  ${HoodieWriteConfig.MERGER_IMPLS.key} = '$mergerType',
          |  ${HoodieStorageConfig.LOGFILE_DATA_BLOCK_FORMAT.key} = 'parquet')
          |location '$path'
          |As

@@ -116,12 +116,12 @@ public class FlinkOptions extends HoodieConfig {
       .withDescription("Payload class used. Override this, if you like to roll your own merge logic, when upserting/inserting.\n"
           + "This will render any value set for the option in-effective");
 
-  public static final ConfigOption<String> RECORD_MERGE_STRATEGY = ConfigOptions
-      .key("record.merge.strategy")
+  public static final ConfigOption<String> RECORD_MERGER_IMPLS = ConfigOptions
+      .key("record.merger.impls")
       .stringType()
       .defaultValue(HoodieAvroRecordMerger.class.getName())
-      .withDescription("A list of merge class provide stateless component interface for merging records, and support various HoodieRecord "
-          + "types, such as Spark records or Flink records. Default merge");
+      .withDescription("List of HoodieMerger implementations constituting Hudi's merging strategy -- based on the engine used "
+          + "Hudi will pick most efficient implementation to perform merging/combining of the records (during update, reading MOR table, etc)");
 
   public static final ConfigOption<String> PARTITION_DEFAULT_NAME = ConfigOptions
       .key("partition.default_name")

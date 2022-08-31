@@ -160,7 +160,7 @@ public class TestInputPathHandler {
     properties.setProperty(HoodieTableConfig.NAME.key(), tableName);
     properties.setProperty(HoodieTableConfig.TYPE.key(), tableType.name());
     properties.setProperty(HoodieTableConfig.PAYLOAD_CLASS_NAME.key(), HoodieAvroPayload.class.getName());
-    properties.setProperty(HoodieTableConfig.MERGE_STRATEGY.key(), HoodieAvroRecordMerger.class.getName());
+    properties.setProperty(HoodieTableConfig.MERGER_IMPLS.key(), HoodieAvroRecordMerger.class.getName());
     return HoodieTableMetaClient.initTableAndGetMetaClient(hadoopConf, basePath, properties);
   }
 

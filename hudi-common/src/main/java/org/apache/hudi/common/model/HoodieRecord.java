@@ -18,6 +18,7 @@
 
 package org.apache.hudi.common.model;
 
+import java.util.Collections;
 import org.apache.avro.Schema;
 import org.apache.avro.generic.GenericRecord;
 
@@ -305,6 +306,10 @@ public abstract class HoodieRecord<T> implements Serializable {
    * Support schema evolution.
    */
   public abstract HoodieRecord rewriteRecordWithNewSchema(Schema recordSchema, Properties props, Schema newSchema, Map<String, String> renameCols) throws IOException;
+
+  public HoodieRecord rewriteRecordWithNewSchema(Schema recordSchema, Properties props, Schema newSchema) throws IOException {
+    return rewriteRecordWithNewSchema(recordSchema, props, newSchema, Collections.emptyMap());
+  }
 
   public abstract HoodieRecord updateValues(Schema recordSchema, Properties props, Map<String, String> metadataValues) throws IOException;
 

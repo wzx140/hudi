@@ -70,7 +70,7 @@ class TestCOWDataSource extends HoodieClientTestBase {
     HoodieMetadataConfig.COMPACT_NUM_DELTA_COMMITS.key -> "1"
   )
   val sparkOpts = Map(
-    HoodieWriteConfig.MERGER_STRATEGY.key -> classOf[HoodieSparkRecordMerger].getName,
+    HoodieWriteConfig.MERGER_IMPLS.key -> classOf[HoodieSparkRecordMerger].getName,
     HoodieStorageConfig.LOGFILE_DATA_BLOCK_FORMAT.key -> "parquet"
   )
 

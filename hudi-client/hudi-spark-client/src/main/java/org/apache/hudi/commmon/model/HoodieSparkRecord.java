@@ -55,7 +55,7 @@ import static org.apache.spark.sql.types.DataTypes.StringType;
  */
 public class HoodieSparkRecord extends HoodieRecord<InternalRow> {
 
-  private StructType structType;
+  private StructType structType = null;
   private Option<Long> schemaFingerPrint = Option.empty();
 
   public HoodieSparkRecord(InternalRow data, StructType schema) {
@@ -269,7 +269,9 @@ public class HoodieSparkRecord extends HoodieRecord<InternalRow> {
   }
 
   public void setStructType(StructType structType) {
-    initSchema(structType);
+    if (structType != null) {
+      initSchema(structType);
+    }
   }
 
   private UTF8String[] extractMetaField(StructType structType) {

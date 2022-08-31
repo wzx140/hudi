@@ -156,11 +156,11 @@ public class HoodieTableConfig extends HoodieConfig {
       .withDocumentation("Payload class to use for performing compactions, i.e merge delta logs with current base file and then "
           + " produce a new base file.");
 
-  public static final ConfigProperty<String> MERGE_STRATEGY = ConfigProperty
-      .key("hoodie.compaction.merge.strategy.class")
+  public static final ConfigProperty<String> MERGER_IMPLS = ConfigProperty
+      .key("hoodie.compaction.merger.impls")
       .defaultValue(HoodieAvroRecordMerger.class.getName())
-      .withDocumentation("A list of merge class provide stateless component interface for merging records, and support various HoodieRecord "
-          + "types, such as Spark records or Flink records. Default merge");
+      .withDocumentation("List of HoodieMerger implementations constituting Hudi's merging strategy -- based on the engine used "
+          + "Hudi will pick most efficient implementation to perform merging/combining of the records (during update, reading MOR table, etc)");
 
   public static final ConfigProperty<String> ARCHIVELOG_FOLDER = ConfigProperty
       .key("hoodie.archivelog.folder")
@@ -244,7 +244,7 @@ public class HoodieTableConfig extends HoodieConfig {
 
   private static final String TABLE_CHECKSUM_FORMAT = "%s.%s"; // <database_name>.<table_name>
 
-  public HoodieTableConfig(FileSystem fs, String metaPath, String payloadClassName, String mergeStrategy) {
+  public HoodieTableConfig(FileSystem fs, String metaPath, String payloadClassName, String mergerImpls) {
     super();
     Path propertyPath = new Path(metaPath, HOODIE_PROPERTIES_FILE);
     LOG.info("Loading table properties from " + propertyPath);
@@ -256,9 +256,9 @@ public class HoodieTableConfig extends HoodieConfig {
         setValue(PAYLOAD_CLASS_NAME, payloadClassName);
         needStore = true;
       }
-      if (contains(MERGE_STRATEGY) && payloadClassName != null
-          && !getString(MERGE_STRATEGY).equals(mergeStrategy)) {
-        setValue(MERGE_STRATEGY, mergeStrategy);
+      if (contains(MERGER_IMPLS) && payloadClassName != null
+          && !getString(MERGER_IMPLS).equals(mergerImpls)) {
+        setValue(MERGER_IMPLS, mergerImpls);
         needStore = true;
       }
       if (needStore) {
@@ -428,7 +428,7 @@ public class HoodieTableConfig extends HoodieConfig {
       hoodieConfig.setDefaultValue(TYPE);
       if (hoodieConfig.getString(TYPE).equals(HoodieTableType.MERGE_ON_READ.name())) {
         hoodieConfig.setDefaultValue(PAYLOAD_CLASS_NAME);
-        hoodieConfig.setDefaultValue(MERGE_STRATEGY);
+        hoodieConfig.setDefaultValue(MERGER_IMPLS);
       }
       hoodieConfig.setDefaultValue(ARCHIVELOG_FOLDER);
       if (!hoodieConfig.contains(TIMELINE_LAYOUT_VERSION)) {
@@ -501,10 +501,10 @@ public class HoodieTableConfig extends HoodieConfig {
   /**
    * Read the payload class for HoodieRecords from the table properties.
    */
-  public String getMergeStrategy() {
+  public String getMergerImpls() {
     // There could be tables written with merge strategy from com.uber.hoodie. Need to transparently
     // change to org.apache.hudi
-    return getStringOrDefault(MERGE_STRATEGY).replace("com.uber.hoodie",
+    return getStringOrDefault(MERGER_IMPLS).replace("com.uber.hoodie",
         "org.apache.hudi");
   }
 
