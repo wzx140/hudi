@@ -151,7 +151,7 @@ public class HoodieParquetDataBlock extends HoodieDataBlock {
         blockContentLoc.getBlockSize());
 
     ClosableIterator<HoodieRecord<T>> iterator = HoodieFileReaderFactory.getReaderFactory(type).getFileReader(inlineConf, inlineLogFilePath, PARQUET)
-        .getRecordIterator(readerSchema, readerSchema);
+        .getRecordIterator(readerSchema);
     return iterator;
   }
 
