@@ -129,6 +129,10 @@ public class HoodieMergedLogRecordScanner extends AbstractHoodieLogRecordReader
     return records;
   }
 
+  public HoodieRecordType getRecordType() {
+    return recordMerger.getRecordType();
+  }
+
   public long getNumMergedRecordsInLog() {
     return numMergedRecordsInLog;
   }

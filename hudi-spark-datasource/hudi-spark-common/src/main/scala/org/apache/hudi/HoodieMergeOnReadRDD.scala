@@ -203,6 +203,8 @@ class HoodieMergeOnReadRDD(@transient sc: SparkContext,
         maxCompactionMemoryInBytes, config, internalSchema)
     }
 
+    log.info(s"Use ${logScanner.getRecordType}")
+
     private val logRecords = logScanner.getRecords.asScala
 
     // NOTE: This have to stay lazy to make sure it's initialized only at the point where it's

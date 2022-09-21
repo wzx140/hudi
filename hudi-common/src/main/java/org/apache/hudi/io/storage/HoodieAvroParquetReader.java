@@ -18,6 +18,8 @@
 
 package org.apache.hudi.io.storage;
 
+import static org.apache.parquet.avro.AvroWriteSupport.WRITE_OLD_LIST_STRUCTURE;
+
 import org.apache.avro.Schema;
 import org.apache.avro.generic.IndexedRecord;
 import org.apache.hadoop.conf.Configuration;
@@ -95,6 +97,9 @@ public class HoodieAvroParquetReader implements HoodieAvroFileReader {
     if (requestedSchema.isPresent()) {
       AvroReadSupport.setRequestedProjection(conf, requestedSchema.get());
     }
+    // If we put complex type at end, we must set false when we read with AvroRecord and write with SparkRecord
+    // The old parquet log written with old list can be read by new list schema
+    conf.set(WRITE_OLD_LIST_STRUCTURE, "false");
     ParquetReader<IndexedRecord> reader = AvroParquetReader.<IndexedRecord>builder(path).withConf(conf).build();
     ParquetReaderIterator<IndexedRecord> parquetReaderIterator = new ParquetReaderIterator<>(reader);
     readerIterators.add(parquetReaderIterator);
