@@ -52,7 +52,7 @@ import java.nio.charset.StandardCharsets
 import java.util.Properties
 import org.apache.hudi.commmon.model.HoodieSparkRecord
 import org.apache.hudi.common.model.HoodieRecord.HoodieRecordType
-import org.apache.spark.sql.hudi.SparkStructTypeSerializer
+import org.apache.spark.sql.hudi.HoodieSparkRecordSerializer
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 import scala.util.Try
@@ -454,9 +454,8 @@ private object HoodieMergeOnReadRDD {
   }
 
   private def registerStructTypeSerializerIfNeed(schemas: List[StructType]): Unit = {
-    val schemaMap = schemas.map(schema => (SchemaNormalization.fingerprint64(schema.json.getBytes(StandardCharsets.UTF_8)), schema))
-      .toMap
-    val serializer = new SparkStructTypeSerializer(schemaMap)
+    schemas.foreach(HoodieInternalRowUtils.addCompressedSchema)
+    val serializer = new HoodieSparkRecordSerializer
     SerializationUtils.setOverallRegister(classOf[HoodieSparkRecord].getName, serializer)
   }
 
