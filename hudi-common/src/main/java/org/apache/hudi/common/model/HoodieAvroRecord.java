@@ -36,6 +36,8 @@ import java.util.Properties;
 
 public class HoodieAvroRecord<T extends HoodieRecordPayload> extends HoodieRecord<T> {
 
+  private transient Option<IndexedRecord> deserRecord = null;
+
   public HoodieAvroRecord(HoodieKey key, T data) {
     super(key, data);
   }
@@ -108,7 +110,7 @@ public class HoodieAvroRecord<T extends HoodieRecordPayload> extends HoodieRecor
 
   @Override
   public HoodieRecord rewriteRecord(Schema recordSchema, Properties props, Schema targetSchema) throws IOException {
-    Option<IndexedRecord> avroRecordPayloadOpt = getData().getInsertValue(recordSchema, props);
+    Option<IndexedRecord> avroRecordPayloadOpt = getDeserData(recordSchema, props);
     GenericRecord avroPayloadInNewSchema =
         HoodieAvroUtils.rewriteRecord((GenericRecord) avroRecordPayloadOpt.get(), targetSchema);
     return new HoodieAvroRecord<>(getKey(), new RewriteAvroPayload(avroPayloadInNewSchema), getOperation());
@@ -116,14 +118,14 @@ public class HoodieAvroRecord<T extends HoodieRecordPayload> extends HoodieRecor
 
   @Override
   public HoodieRecord rewriteRecordWithNewSchema(Schema recordSchema, Properties props, Schema newSchema, Map<String, String> renameCols) throws IOException {
-    GenericRecord oldRecord = (GenericRecord) getData().getInsertValue(recordSchema, props).get();
+    GenericRecord oldRecord = (GenericRecord) getDeserData(recordSchema, props).get();
     GenericRecord rewriteRecord = HoodieAvroUtils.rewriteRecordWithNewSchema(oldRecord, newSchema, renameCols);
     return new HoodieAvroRecord<>(getKey(), new RewriteAvroPayload(rewriteRecord), getOperation());
   }
 
   @Override
   public HoodieRecord updateMetadataValues(Schema recordSchema, Properties props, MetadataValues metadataValues) throws IOException {
-    GenericRecord avroRecordPayload = (GenericRecord) getData().getInsertValue(recordSchema, props).get();
+    GenericRecord avroRecordPayload = (GenericRecord) getDeserData(recordSchema, props).get();
 
     metadataValues.getKv().forEach((key, value) -> {
       if (value != null) {
@@ -136,19 +138,19 @@ public class HoodieAvroRecord<T extends HoodieRecordPayload> extends HoodieRecor
 
   @Override
   public HoodieRecord truncateRecordKey(Schema recordSchema, Properties props, String keyFieldName) throws IOException {
-    GenericRecord avroRecordPayload = (GenericRecord) getData().getInsertValue(recordSchema, props).get();
+    GenericRecord avroRecordPayload = (GenericRecord) getDeserData(recordSchema, props).get();
     avroRecordPayload.put(keyFieldName, StringUtils.EMPTY_STRING);
     return new HoodieAvroRecord<>(getKey(), new RewriteAvroPayload(avroRecordPayload), getOperation());
   }
 
   @Override
   public boolean isDelete(Schema recordSchema, Properties props) throws IOException {
-    return !getData().getInsertValue(recordSchema, props).isPresent();
+    return !getDeserData(recordSchema, props).isPresent();
   }
 
   @Override
   public boolean shouldIgnore(Schema recordSchema, Properties props) throws IOException {
-    Option<IndexedRecord> insertRecord = getData().getInsertValue(recordSchema, props);
+    Option<IndexedRecord> insertRecord = getDeserData(recordSchema, props);
     // just skip the ignored record
     if (insertRecord.isPresent() && insertRecord.get().equals(SENTINEL)) {
       return true;
@@ -169,7 +171,7 @@ public class HoodieAvroRecord<T extends HoodieRecordPayload> extends HoodieRecor
       Boolean withOperation,
       Option<String> partitionNameOp,
       Boolean populateMetaFields) throws IOException {
-    IndexedRecord indexedRecord = (IndexedRecord) data.getInsertValue(recordSchema, props).get();
+    IndexedRecord indexedRecord = getDeserData(recordSchema, props).get();
     String payloadClass = ConfigUtils.getPayloadClass(props);
     String preCombineField = ConfigUtils.getOrderingField(props);
     return HoodieAvroUtils.createHoodieRecordFromAvro(indexedRecord, payloadClass, preCombineField, simpleKeyGenFieldsOpt, withOperation, partitionNameOp, populateMetaFields);
@@ -187,11 +189,18 @@ public class HoodieAvroRecord<T extends HoodieRecordPayload> extends HoodieRecor
 
   @Override
   public Option<HoodieAvroIndexedRecord> toIndexedRecord(Schema recordSchema, Properties props) throws IOException {
-    Option<IndexedRecord> avroData = getData().getInsertValue(recordSchema, props);
+    Option<IndexedRecord> avroData = getDeserData(recordSchema, props);
     if (avroData.isPresent()) {
       return Option.of(new HoodieAvroIndexedRecord(avroData.get()));
     } else {
       return Option.empty();
     }
+  }
+
+  private Option<IndexedRecord> getDeserData(Schema recordSchema, Properties props) throws IOException {
+    if (deserRecord == null) {
+      this.deserRecord = this.data.getInsertValue(recordSchema, props);
+    }
+    return this.deserRecord;
   }
 }
