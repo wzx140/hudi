@@ -156,7 +156,6 @@ public abstract class BaseCommitActionExecutor<T, I, K, O, R>
     return  table.getMetaClient().getCommitActionType();
   }
 
-
   /**
    * Check if any validators are configured and run those validations. If any of the validations fail, throws HoodieValidationException.
    */

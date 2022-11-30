@@ -18,7 +18,6 @@
 
 package org.apache.hudi.common.table.log.block;
 
-import org.apache.hudi.avro.HoodieAvroWriteSupport;
 import org.apache.hudi.common.config.HoodieConfig;
 import org.apache.hudi.common.fs.inline.InLineFSUtils;
 import org.apache.hudi.common.fs.inline.InLineFileSystem;
@@ -26,26 +25,16 @@ import org.apache.hudi.common.model.HoodieFileFormat;
 import org.apache.hudi.common.model.HoodieRecord.HoodieRecordType;
 import org.apache.hudi.common.model.HoodieRecord;
 import org.apache.hudi.common.util.ClosableIterator;
-import org.apache.hudi.common.util.ParquetReaderIterator;
 import org.apache.hudi.common.util.Option;
-import org.apache.hudi.internal.schema.InternalSchema;
-import org.apache.hudi.io.storage.HoodieParquetConfig;
-import org.apache.hudi.io.storage.HoodieParquetStreamWriter;
 import org.apache.hudi.io.storage.HoodieFileReaderFactory;
 import org.apache.hudi.io.storage.HoodieFileWriter;
 import org.apache.hudi.io.storage.HoodieFileWriterFactory;
 
-
 import org.apache.avro.Schema;
-import org.apache.avro.generic.IndexedRecord;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.Path;
-import org.apache.parquet.avro.AvroParquetReader;
-import org.apache.parquet.avro.AvroReadSupport;
-import org.apache.parquet.avro.AvroSchemaConverter;
-import org.apache.parquet.hadoop.ParquetReader;
 import org.apache.parquet.hadoop.ParquetWriter;
 import org.apache.parquet.hadoop.metadata.CompressionCodecName;
 
@@ -58,10 +47,10 @@ import java.util.Map;
 import static org.apache.hudi.common.config.HoodieStorageConfig.PARQUET_BLOCK_SIZE;
 import static org.apache.hudi.common.config.HoodieStorageConfig.PARQUET_COMPRESSION_CODEC_NAME;
 import static org.apache.hudi.common.config.HoodieStorageConfig.PARQUET_COMPRESSION_RATIO_FRACTION;
+import static org.apache.hudi.common.config.HoodieStorageConfig.PARQUET_DICTIONARY_ENABLED;
 import static org.apache.hudi.common.config.HoodieStorageConfig.PARQUET_MAX_FILE_SIZE;
 import static org.apache.hudi.common.config.HoodieStorageConfig.PARQUET_PAGE_SIZE;
 import static org.apache.hudi.common.model.HoodieFileFormat.PARQUET;
-import static org.apache.hudi.common.table.HoodieTableConfig.POPULATE_META_FIELDS;
 
 /**
  * HoodieParquetDataBlock contains a list of records serialized using Parquet.
@@ -79,8 +68,8 @@ public class HoodieParquetDataBlock extends HoodieDataBlock {
                                 Option<Schema> readerSchema,
                                 Map<HeaderMetadataType, String> header,
                                 Map<HeaderMetadataType, String> footer,
-                                String keyField, InternalSchema internalSchema) {
-    super(content, inputStream, readBlockLazily, Option.of(logBlockContentLocation), readerSchema, header, footer, keyField, false, internalSchema);
+                                String keyField) {
+    super(content, inputStream, readBlockLazily, Option.of(logBlockContentLocation), readerSchema, header, footer, keyField, false);
 
     this.compressionCodecName = Option.empty();
     this.expectedCompressionRatio = Option.empty();
@@ -122,8 +111,7 @@ public class HoodieParquetDataBlock extends HoodieDataBlock {
       config.setValue(PARQUET_PAGE_SIZE.key(), String.valueOf(ParquetWriter.DEFAULT_PAGE_SIZE));
       config.setValue(PARQUET_MAX_FILE_SIZE.key(), String.valueOf(1024 * 1024 * 1024));
       config.setValue(PARQUET_COMPRESSION_RATIO_FRACTION.key(), String.valueOf(expectedCompressionRatio.get()));
-      config.setValue(POPULATE_META_FIELDS.key(), "false");
-      config.setValue(, String.valueOf(useDictionaryEncoding.get()));
+      config.setValue(PARQUET_DICTIONARY_ENABLED, String.valueOf(useDictionaryEncoding.get()));
       HoodieRecordType recordType = records.iterator().next().getRecordType();
       try {
         parquetWriter = HoodieFileWriterFactory.getFileWriter(
@@ -169,13 +157,6 @@ public class HoodieParquetDataBlock extends HoodieDataBlock {
         blockContentLoc.getBlockSize());
 
     Schema writerSchema = new Schema.Parser().parse(this.getLogBlockHeader().get(HeaderMetadataType.SCHEMA));
-    if (!internalSchema.isEmptySchema()) {
-      // we should use write schema to read log file,
-      // since when we have done some DDL operation, the readerSchema maybe different from writeSchema, avro reader will throw exception.
-      // eg: origin writeSchema is: "a String, b double" then we add a new column now the readerSchema will be: "a string, c int, b double". it's wrong to use readerSchema to read old log file.
-      // after we read those record by writeSchema,  we rewrite those record with readerSchema in AbstractHoodieLogRecordReader
-      readerSchema = writerSchema;
-    }
 
     ClosableIterator<HoodieRecord<T>> iterator = HoodieFileReaderFactory.getReaderFactory(type).getFileReader(inlineConf, inlineLogFilePath, PARQUET)
         .getRecordIterator(writerSchema, readerSchema);

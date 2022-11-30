@@ -327,7 +327,15 @@ object HoodieSparkSqlWriter {
               throw new UnsupportedOperationException(s"${writeConfig.getRecordMerger.getClass.getName} only support parquet log.")
             }
             // Convert to RDD[HoodieRecord]
-            val hoodieRecords = createHoodieRecordRdd(df, writeConfig, parameters, writerSchema, dataFileSchemaStr, operation)
+            val hoodieRecords = createHoodieRecordRdd(
+              df,
+              writeConfig,
+              parameters,
+              avroRecordName,
+              avroRecordNamespace,
+              writerSchema,
+              dataFileSchemaStr,
+              operation)
 
             if (isAsyncCompactionEnabled(client, tableConfig, parameters, jsc.hadoopConfiguration())) {
               asyncCompactionTriggerFn.get.apply(client)
@@ -1000,12 +1008,12 @@ object HoodieSparkSqlWriter {
   private def createHoodieRecordRdd(df: DataFrame,
                                     config: HoodieWriteConfig,
                                     parameters: Map[String, String],
+                                    recordName: String,
+                                    recordNameSpace: String,
                                     writerSchema: Schema,
                                     dataFileSchemaStr: String,
                                     operation: WriteOperationType) = {
     val shouldDropPartitionColumns = config.getBoolean(DataSourceWriteOptions.DROP_PARTITION_COLUMNS)
-    val tblName = config.getString(HoodieWriteConfig.TBL_NAME)
-    val (recordName, recordNameSpace) = AvroConversionUtils.getAvroRecordNameAndNamespace(tblName)
     val keyGenerator = HoodieSparkKeyGeneratorFactory.createKeyGenerator(new TypedProperties(config.getProps))
     val recordType = config.getRecordMerger.getRecordType
 

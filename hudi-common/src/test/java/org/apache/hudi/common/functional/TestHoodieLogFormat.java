@@ -1212,7 +1212,7 @@ public class TestHoodieLogFormat extends HoodieCommonTestHarness {
     final List<Boolean> newEmptyPayloads = new ArrayList<>();
     scanner.forEach(s -> {
       try {
-        if (!s.getData().getInsertValue(schema).isPresent()) {
+        if (!((HoodieRecordPayload) s.getData()).getInsertValue(schema).isPresent()) {
           newEmptyPayloads.add(true);
         }
       } catch (IOException io) {
@@ -1925,6 +1925,7 @@ public class TestHoodieLogFormat extends HoodieCommonTestHarness {
         .withDiskMapType(diskMapType)
         .withBitCaskDiskMapCompressionEnabled(isCompressionEnabled)
         .withUseScanV2(true)
+        .withRecordMerger(HoodieRecordUtils.loadRecordMerger(HoodieAvroRecordMerger.class.getName()))
         .build();
     assertEquals(600, scanner.getTotalLogRecords(), "We would read 600 records from scanner");
     final List<String> readKeys = new ArrayList<>();

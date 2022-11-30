@@ -228,7 +228,7 @@ public class HoodieAppendHandle<T, I, K, O> extends HoodieWriteHandle<T, I, K, O
 
   private Option<HoodieRecord> prepareRecord(HoodieRecord<T> hoodieRecord) {
     Option<Map<String, String>> recordMetadata = hoodieRecord.getMetadata();
-    Schema schema = useWriterSchema ? writeSchemaWithMetaFields : writerSchema;
+    Schema schema = useWriterSchema ? writeSchemaWithMetaFields : writeSchema;
     try {
       // Pass the isUpdateRecord to the props for HoodieRecordPayload to judge
       // Whether it is an update or insert record.
@@ -283,8 +283,10 @@ public class HoodieAppendHandle<T, I, K, O> extends HoodieWriteHandle<T, I, K, O
       metadataValues.setFileName(fileId);
       metadataValues.setPartitionPath(partitionPath);
       metadataValues.setRecordKey(hoodieRecord.getRecordKey());
-      metadataValues.setCommitTime(instantTime);
-      metadataValues.setCommitSeqno(seqId);
+      if (!this.isLogCompaction) {
+        metadataValues.setCommitTime(instantTime);
+        metadataValues.setCommitSeqno(seqId);
+      }
     }
     if (config.allowOperationMetadataField()) {
       metadataValues.setOperation(hoodieRecord.getOperation().getName());
@@ -405,7 +407,7 @@ public class HoodieAppendHandle<T, I, K, O> extends HoodieWriteHandle<T, I, K, O
 
       List<IndexedRecord> indexedRecords = new LinkedList<>();
       for (HoodieRecord hoodieRecord : recordList) {
-        indexedRecords.add(hoodieRecord.toIndexedRecord(tableSchema, config.getProps()).get().getData());
+        indexedRecords.add(hoodieRecord.toIndexedRecord(writeSchema, config.getProps()).get().getData());
       }
 
       Map<String, HoodieColumnRangeMetadata<Comparable>> columnRangesMetadataMap =
@@ -512,10 +514,10 @@ public class HoodieAppendHandle<T, I, K, O> extends HoodieWriteHandle<T, I, K, O
     }
   }
 
-  public void write(Map<String, HoodieRecord<? extends HoodieRecordPayload>> recordMap) {
+  public void write(Map<String, HoodieRecord<T>> recordMap) {
     try {
-      for (Map.Entry<String, HoodieRecord<? extends HoodieRecordPayload>> entry: recordMap.entrySet()) {
-        HoodieRecord<T> record = (HoodieRecord<T>) entry.getValue();
+      for (Map.Entry<String, HoodieRecord<T>> entry: recordMap.entrySet()) {
+        HoodieRecord<T> record = entry.getValue();
         init(record);
         flushToDiskIfRequired(record, false);
         writeToBuffer(record);
@@ -558,12 +560,12 @@ public class HoodieAppendHandle<T, I, K, O> extends HoodieWriteHandle<T, I, K, O
       record.seal();
     }
     // fetch the ordering val first in case the record was deflated.
-    final Comparable<?> orderingVal = record.getOrderingValue(tableSchema, recordProperties);
+    final Comparable<?> orderingVal = record.getOrderingValue(writeSchema, recordProperties);
     Option<HoodieRecord> indexedRecord = prepareRecord(record);
     if (indexedRecord.isPresent()) {
       // Skip the ignored record.
       try {
-        if (!indexedRecord.get().shouldIgnore(tableSchema, recordProperties)) {
+        if (!indexedRecord.get().shouldIgnore(writeSchema, recordProperties)) {
           recordList.add(indexedRecord.get());
         }
       } catch (IOException e) {

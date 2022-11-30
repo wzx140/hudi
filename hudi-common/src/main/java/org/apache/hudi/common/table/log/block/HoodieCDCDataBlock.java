@@ -18,17 +18,11 @@
 
 package org.apache.hudi.common.table.log.block;
 
+import org.apache.hudi.common.model.HoodieRecord;
 import org.apache.hudi.common.util.Option;
 
 import org.apache.avro.Schema;
-
 import org.apache.hadoop.fs.FSDataInputStream;
-
-import org.apache.hudi.common.model.HoodieRecord;
-import org.apache.hudi.common.table.log.block.HoodieLogBlock.HeaderMetadataType;
-import org.apache.hudi.common.table.log.block.HoodieLogBlock.HoodieLogBlockContentLocation;
-import org.apache.hudi.common.table.log.block.HoodieLogBlock.HoodieLogBlockType;
-import org.apache.hudi.common.util.Option;
 
 import java.util.HashMap;
 import java.util.List;

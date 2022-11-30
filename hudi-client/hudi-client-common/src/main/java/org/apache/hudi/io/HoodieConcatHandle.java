@@ -93,7 +93,7 @@ public class HoodieConcatHandle<T, I, K, O> extends HoodieMergeHandle<T, I, K, O
    */
   @Override
   public void write(HoodieRecord oldRecord) {
-    Schema oldSchema = config.populateMetaFields() ? tableSchemaWithMetaFields : tableSchema;
+    Schema oldSchema = config.populateMetaFields() ? writeSchemaWithMetaFields : writeSchema;
     String key = oldRecord.getRecordKey(oldSchema, keyGeneratorOpt);
     try {
       // NOTE: We're enforcing preservation of the record metadata to keep existing semantic
@@ -109,7 +109,6 @@ public class HoodieConcatHandle<T, I, K, O> extends HoodieMergeHandle<T, I, K, O
 
   @Override
   protected void writeIncomingRecords() throws IOException {
-    Schema schema = useWriterSchemaForCompaction ? tableSchemaWithMetaFields : tableSchema;
     while (recordItr.hasNext()) {
       HoodieRecord<T> record = recordItr.next();
       if (needsUpdateLocation()) {
@@ -117,7 +116,7 @@ public class HoodieConcatHandle<T, I, K, O> extends HoodieMergeHandle<T, I, K, O
         record.setNewLocation(new HoodieRecordLocation(instantTime, fileId));
         record.seal();
       }
-      writeInsertRecord(record, schema);
+      writeInsertRecord(record);
     }
   }
 }

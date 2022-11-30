@@ -97,10 +97,11 @@ public class HoodieMergeHandleWithChangeLog<T, I, K, O> extends HoodieMergeHandl
     return result;
   }
 
-  protected void writeInsertRecord(HoodieRecord<T> newRecord, Schema schema) throws IOException {
+  protected void writeInsertRecord(HoodieRecord<T> newRecord) throws IOException {
+    Schema schema = useWriterSchemaForCompaction ? writeSchemaWithMetaFields : writeSchema;
     // TODO Remove these unnecessary newInstance invocations
     HoodieRecord<T> savedRecord = newRecord.newInstance();
-    super.writeInsertRecord(newRecord, schema);
+    super.writeInsertRecord(newRecord);
     if (!HoodieOperation.isDelete(newRecord.getOperation())) {
       cdcLogger.put(newRecord, null, savedRecord.toIndexedRecord(schema, config.getPayloadConfig().getProps()).map(HoodieAvroIndexedRecord::getData));
     }

@@ -37,7 +37,7 @@ import org.apache.hudi.keygen.constant.KeyGeneratorOptions.Config
 import org.apache.hudi.metrics.Metrics
 import org.apache.hudi.testutils.HoodieClientTestBase
 import org.apache.hudi.util.JFunction
-import org.apache.hudi.{AvroConversionUtils, DataSourceReadOptions, DataSourceWriteOptions, HoodieDataSourceHelpers, QuickstartUtils, ScalaAssertionSupport}
+import org.apache.hudi.{AvroConversionUtils, DataSourceReadOptions, DataSourceWriteOptions, HoodieDataSourceHelpers, HoodieSparkRecordMerger, QuickstartUtils, ScalaAssertionSupport}
 import org.apache.spark.sql.{HoodieInternalRowUtils, _}
 import org.apache.spark.sql.functions.{col, concat, lit, udf, when}
 import org.apache.spark.sql.hudi.HoodieSparkSessionExtension
@@ -48,9 +48,11 @@ import org.junit.jupiter.api.Assertions.{assertEquals, assertTrue, fail}
 import org.junit.jupiter.api.{AfterEach, BeforeEach, Test}
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.{CsvSource, EnumSource}
+
 import java.sql.{Date, Timestamp}
 import java.util.function.Consumer
 import org.apache.hudi.common.model.HoodieRecord.HoodieRecordType
+
 import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
 
@@ -872,7 +874,6 @@ class TestCOWDataSource extends HoodieClientTestBase with ScalaAssertionSupport 
       .mode(SaveMode.Overwrite)
       .save(basePath)
     val recordsReadDF = spark.read.format("org.apache.hudi")
-      .options(readOpts)
       .load(basePath)
     val resultSchema = new StructType(recordsReadDF.schema.filter(p=> !p.name.startsWith("_hoodie")).toArray)
     assertEquals(resultSchema, schema1)

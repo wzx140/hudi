@@ -18,18 +18,19 @@
 
 package org.apache.hudi.client.utils;
 
+import org.apache.hudi.common.model.HoodieRecord;
 import org.apache.hudi.common.util.ValidationUtils;
 
 import java.util.Iterator;
 import java.util.function.BiFunction;
 
-public class MergingIterator<T> implements Iterator<T> {
+public class MergingIterator implements Iterator<HoodieRecord> {
 
-  private final Iterator<T> leftIterator;
-  private final Iterator<T> rightIterator;
-  private final BiFunction<T, T, T> mergeFunction;
+  private final Iterator<HoodieRecord> leftIterator;
+  private final Iterator<HoodieRecord> rightIterator;
+  private final BiFunction<HoodieRecord, HoodieRecord, HoodieRecord> mergeFunction;
 
-  public MergingIterator(Iterator<T> leftIterator, Iterator<T> rightIterator, BiFunction<T, T, T> mergeFunction) {
+  public MergingIterator(Iterator<HoodieRecord> leftIterator, Iterator<HoodieRecord> rightIterator, BiFunction<HoodieRecord, HoodieRecord, HoodieRecord> mergeFunction) {
     this.leftIterator = leftIterator;
     this.rightIterator = rightIterator;
     this.mergeFunction = mergeFunction;
@@ -44,7 +45,7 @@ public class MergingIterator<T> implements Iterator<T> {
   }
 
   @Override
-  public T next() {
+  public HoodieRecord next() {
     return mergeFunction.apply(leftIterator.next(), rightIterator.next());
   }
 }

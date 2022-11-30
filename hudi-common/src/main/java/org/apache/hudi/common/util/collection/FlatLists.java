@@ -59,7 +59,6 @@ public class FlatLists {
     return new ComparableListImpl(new ArrayList<>(t));
   }
 
-
   /** List that is also comparable.
    *
    * <p>You can create an instance whose type

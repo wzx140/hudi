@@ -32,14 +32,15 @@ import org.apache.hudi.common.model.ClusteringOperation;
 import org.apache.hudi.common.model.HoodieFileGroupId;
 import org.apache.hudi.common.model.HoodieKey;
 import org.apache.hudi.common.model.HoodieRecord;
-import org.apache.hudi.common.util.Option;
 import org.apache.hudi.common.util.ClosableIterator;
 import org.apache.hudi.common.util.MappingIterator;
+import org.apache.hudi.common.util.Option;
 import org.apache.hudi.config.HoodieWriteConfig;
 import org.apache.hudi.data.HoodieJavaRDD;
 import org.apache.hudi.exception.HoodieClusteringException;
 import org.apache.hudi.io.storage.HoodieFileReader;
 import org.apache.hudi.io.storage.HoodieFileReaderFactory;
+import org.apache.hudi.keygen.BaseKeyGenerator;
 import org.apache.hudi.keygen.factory.HoodieSparkKeyGeneratorFactory;
 import org.apache.hudi.table.HoodieTable;
 import org.apache.hudi.table.action.HoodieWriteMetadata;
@@ -105,7 +106,6 @@ public abstract class SingleSparkJobExecutionStrategy<T>
     return writeMetadata;
   }
 
-
   /**
    * Submit job to execute clustering for the group.
    */
@@ -125,7 +125,6 @@ public abstract class SingleSparkJobExecutionStrategy<T>
     return StreamSupport.stream(writeStatusIterable.spliterator(), false)
         .flatMap(Collection::stream);
   }
-
 
   /**
    * Execute clustering to write inputRecords into new files as defined by rules in strategy parameters.

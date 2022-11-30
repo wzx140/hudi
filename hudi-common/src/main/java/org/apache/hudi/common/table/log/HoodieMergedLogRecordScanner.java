@@ -162,9 +162,9 @@ public class HoodieMergedLogRecordScanner extends AbstractHoodieLogRecordReader
           newRecord, readerSchema, this.getPayloadProps()).get().getLeft();
       // If combinedValue is oldValue, no need rePut oldRecord
       if (combinedRecord.getData() != oldValue) {
-        HoodieRecord latestHoodieRecord = combinedRecord.newInstance(new HoodieKey(key, hoodieRecord.getPartitionPath()), operation)
+        HoodieRecord latestHoodieRecord = combinedRecord.newInstance(new HoodieKey(key, newRecord.getPartitionPath()), newRecord.getOperation());
         latestHoodieRecord.unseal();
-        latestHoodieRecord.setCurrentLocation(hoodieRecord.getCurrentLocation());
+        latestHoodieRecord.setCurrentLocation(newRecord.getCurrentLocation());
         latestHoodieRecord.seal();
         // NOTE: Record have to be cloned here to make sure if it holds low-level engine-specific
         //       payload pointing into a shared, mutable (underlying) buffer we get a clean copy of
@@ -173,6 +173,9 @@ public class HoodieMergedLogRecordScanner extends AbstractHoodieLogRecordReader
       }
     } else {
       // Put the record as is
+      // NOTE: Record have to be cloned here to make sure if it holds low-level engine-specific
+      //       payload pointing into a shared, mutable (underlying) buffer we get a clean copy of
+      //       it since these records will be put into records(Map).
       records.put(key, newRecord.copy());
     }
   }

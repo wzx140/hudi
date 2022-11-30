@@ -57,7 +57,7 @@ public class FlinkConcatAndReplaceHandle<T, I, K, O>
    */
   @Override
   public void write(HoodieRecord oldRecord) {
-    Schema oldSchema = config.populateMetaFields() ? tableSchemaWithMetaFields : tableSchema;
+    Schema oldSchema = config.populateMetaFields() ? writeSchemaWithMetaFields : writeSchema;
     String key = oldRecord.getRecordKey(oldSchema, keyGeneratorOpt);
     try {
       fileWriter.write(key, oldRecord, writeSchema);
@@ -72,10 +72,9 @@ public class FlinkConcatAndReplaceHandle<T, I, K, O>
 
   @Override
   protected void writeIncomingRecords() throws IOException {
-    Schema schema = useWriterSchemaForCompaction ? tableSchemaWithMetaFields : tableSchema;
     while (recordItr.hasNext()) {
       HoodieRecord<T> record = recordItr.next();
-      writeInsertRecord(record, schema);
+      writeInsertRecord(record);
     }
   }
 }

@@ -29,7 +29,6 @@ import org.apache.hudi.common.util.MappingIterator;
 import org.apache.hudi.common.util.Option;
 import org.apache.hudi.common.util.VisibleForTesting;
 import org.apache.hudi.common.util.io.ByteBufferBackedInputStream;
-import org.apache.hudi.avro.HoodieAvroUtils;
 import org.apache.hudi.exception.HoodieException;
 import org.apache.hudi.exception.HoodieIOException;
 import org.apache.hudi.util.Lazy;

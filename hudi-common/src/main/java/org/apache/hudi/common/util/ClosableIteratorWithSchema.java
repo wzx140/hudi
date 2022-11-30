@@ -16,33 +16,40 @@
  * limitations under the License.
  */
 
-package org.apache.hudi.exception;
+package org.apache.hudi.common.util;
 
-/**
- * <p>
- * Exception thrown for Hoodie failures. The root of the exception hierarchy.
- * </p>
- * <p>
- * Hoodie Write/Read clients will throw this exception if any of its operations fail. This is a runtime (unchecked)
- * exception.
- * </p>
- */
-public class HoodieException extends RuntimeException {
+import org.apache.avro.Schema;
 
-  public HoodieException() {
-    super();
+public class ClosableIteratorWithSchema<R> implements ClosableIterator<R> {
+
+  private final ClosableIterator<R> iter;
+  private final Schema schema;
+
+  public ClosableIteratorWithSchema(ClosableIterator<R> iter, Schema schema) {
+    this.iter = iter;
+    this.schema = schema;
   }
 
-  public HoodieException(String message) {
-    super(message);
+  public static <R> ClosableIteratorWithSchema<R> newInstance(ClosableIterator<R> iter, Schema schema) {
+    return new ClosableIteratorWithSchema<>(iter, schema);
   }
 
-  public HoodieException(String message, Throwable t) {
-    super(message, t);
+  public Schema getSchema() {
+    return schema;
   }
 
-  public HoodieException(Throwable t) {
-    super(t);
+  @Override
+  public void close() {
+    iter.close();
   }
 
+  @Override
+  public boolean hasNext() {
+    return iter.hasNext();
+  }
+
+  @Override
+  public R next() {
+    return iter.next();
+  }
 }

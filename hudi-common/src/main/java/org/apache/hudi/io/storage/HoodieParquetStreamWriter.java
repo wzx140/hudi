@@ -37,9 +37,8 @@ import java.io.IOException;
  * Hudi log block writer for parquet format.
  * <p>
  * TODO(HUDI-3035) unify w/ HoodieParquetWriter.
- *
- * @param <R> Record implementation that permits field access by integer index.
- */public class HoodieParquetStreamWriter implements HoodieAvroFileWriter, AutoCloseable {
+ */
+public class HoodieParquetStreamWriter implements HoodieAvroFileWriter, AutoCloseable {
 
   private final ParquetWriter<IndexedRecord> writer;
   private final HoodieAvroWriteSupport writeSupport;

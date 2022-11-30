@@ -19,7 +19,6 @@
 package org.apache.hudi.table.action.commit;
 
 import org.apache.hudi.client.utils.MergingIterator;
-import org.apache.hudi.common.model.HoodieBaseFile;
 import org.apache.hudi.common.model.HoodieRecord;
 import org.apache.hudi.common.model.HoodieRecord.HoodieRecordType;
 import org.apache.hudi.common.util.queue.IteratorBasedQueueConsumer;
@@ -28,7 +27,6 @@ import org.apache.hudi.io.storage.HoodieFileReader;
 import org.apache.hudi.io.storage.HoodieFileReaderFactory;
 import org.apache.hudi.table.HoodieTable;
 
-import org.apache.avro.Schema;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 
@@ -61,8 +59,8 @@ public abstract class BaseMergeHelper {
     HoodieRecordType recordType = table.getConfig().getRecordMerger().getRecordType();
     HoodieFileReader<HoodieRecord> bootstrapReader =
         HoodieFileReaderFactory.getReaderFactory(recordType).getFileReader(bootstrapFileConfig, bootstrapFilePath);
-    return new MergingIterator<>(recordIterator, bootstrapReader.getRecordIterator(),
-        (inputRecordPair) -> oneRecord.joinWith(otherRecord, mergeHandle.getWriterSchemaWithMetaFields()));
+    return new MergingIterator(recordIterator, (Iterator) bootstrapReader.getRecordIterator(),
+        (left, right) -> left.joinWith(right, mergeHandle.getWriterSchemaWithMetaFields()));
   }
 
   /**

@@ -193,8 +193,8 @@ public class HoodieMergeHandle<T, I, K, O> extends HoodieWriteHandle<T, I, K, O>
       createMarkerFile(partitionPath, newFilePath.getName());
 
       // Create the writer for writing the new version file
-      fileWriter = HoodieFileWriterFactory.getFileWriter(instantTime, newFilePath, hoodieTable,
-          config, writeSchemaWithMetaFields, taskContextSupplier);
+      fileWriter = HoodieFileWriterFactory.getFileWriter(instantTime, newFilePath, hoodieTable.getHadoopConf(),
+          config, writeSchemaWithMetaFields, taskContextSupplier, recordMerger.getRecordType());
     } catch (IOException io) {
       LOG.error("Error in update task at commit " + instantTime, io);
       writeStatus.setGlobalError(io);
@@ -327,7 +327,7 @@ public class HoodieMergeHandle<T, I, K, O> extends HoodieWriteHandle<T, I, K, O>
    * Go through an old record. Here if we detect a newer version shows up, we write the new one to the file.
    */
   public void write(HoodieRecord<T> oldRecord) {
-    Schema oldSchema = config.populateMetaFields() ? tableSchemaWithMetaFields : tableSchema;
+    Schema oldSchema = config.populateMetaFields() ? writeSchemaWithMetaFields : writeSchema;
     Schema newSchema = useWriterSchemaForCompaction ? writeSchemaWithMetaFields : writeSchema;
     boolean copyOldRecord = true;
     String key = oldRecord.getRecordKey(oldSchema, keyGeneratorOpt);
@@ -395,11 +395,10 @@ public class HoodieMergeHandle<T, I, K, O> extends HoodieWriteHandle<T, I, K, O>
     // write out any pending records (this can happen when inserts are turned into updates)
     Iterator<HoodieRecord<T>> newRecordsItr = (keyToNewRecords instanceof ExternalSpillableMap)
         ? ((ExternalSpillableMap)keyToNewRecords).iterator() : keyToNewRecords.values().iterator();
-    Schema schema = useWriterSchemaForCompaction ? tableSchemaWithMetaFields : tableSchema;
     while (newRecordsItr.hasNext()) {
       HoodieRecord<T> hoodieRecord = newRecordsItr.next();
       if (!writtenRecordKeys.contains(hoodieRecord.getRecordKey())) {
-        writeInsertRecord(hoodieRecord, schema);
+        writeInsertRecord(hoodieRecord);
       }
     }
   }

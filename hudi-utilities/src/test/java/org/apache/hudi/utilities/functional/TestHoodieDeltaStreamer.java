@@ -685,9 +685,9 @@ public class TestHoodieDeltaStreamer extends HoodieDeltaStreamerTestBase {
     assertEquals(expectedFieldNames.size(), fields.length);
     assertTrue(fieldNames.containsAll(HoodieRecord.HOODIE_META_COLUMNS));
     assertTrue(fieldNames.containsAll(expectedFieldNames));
-    UtilitiesTestBase.Helpers.deleteFileFromDfs(dfs, tableBasePath);
-    UtilitiesTestBase.Helpers.deleteFileFromDfs(dfs, bootstrapSourcePath);
-    UtilitiesTestBase.Helpers.deleteFileFromDfs(dfs, newDatasetBasePath);
+    UtilitiesTestBase.Helpers.deleteFileFromDfs(fs, tableBasePath);
+    UtilitiesTestBase.Helpers.deleteFileFromDfs(fs, bootstrapSourcePath);
+    UtilitiesTestBase.Helpers.deleteFileFromDfs(fs, newDatasetBasePath);
   }
 
   @Test
@@ -804,9 +804,9 @@ public class TestHoodieDeltaStreamer extends HoodieDeltaStreamerTestBase {
     assertEquals(expectedSchema, tableSchema);
 
     // clean up and reinit
-    UtilitiesTestBase.Helpers.deleteFileFromDfs(dfs, tableBasePath);
-    UtilitiesTestBase.Helpers.deleteFileFromDfs(FSUtils.getFs(cfg.targetBasePath, jsc.hadoopConfiguration()), dfsBasePath + "/" + PROPS_FILENAME_TEST_SOURCE);
-    writeCommonPropsToFile(dfs, basePath);
+    UtilitiesTestBase.Helpers.deleteFileFromDfs(fs, tableBasePath);
+    UtilitiesTestBase.Helpers.deleteFileFromDfs(FSUtils.getFs(cfg.targetBasePath, jsc.hadoopConfiguration()), basePath + "/" + PROPS_FILENAME_TEST_SOURCE);
+    writeCommonPropsToFile(fs, basePath);
     defaultSchemaProviderClassName = FilebasedSchemaProvider.class.getName();
   }
 
@@ -830,7 +830,7 @@ public class TestHoodieDeltaStreamer extends HoodieDeltaStreamerTestBase {
     ds.sync();
     TestHelpers.assertRecordCount(SQL_SOURCE_NUM_RECORDS, tableBasePath, sqlContext);
     assertFalse(Metrics.isInitialized(), "Metrics should be shutdown");
-    UtilitiesTestBase.Helpers.deleteFileFromDfs(dfs, tableBasePath);
+    UtilitiesTestBase.Helpers.deleteFileFromDfs(fs, tableBasePath);
   }
 
   @ParameterizedTest
@@ -859,7 +859,7 @@ public class TestHoodieDeltaStreamer extends HoodieDeltaStreamerTestBase {
     ds.sync();
     TestHelpers.assertRecordCount(SQL_SOURCE_NUM_RECORDS, tableBasePath, sqlContext);
     assertFalse(Metrics.isInitialized(), "Metrics should be shutdown");
-    UtilitiesTestBase.Helpers.deleteFileFromDfs(dfs, tableBasePath);
+    UtilitiesTestBase.Helpers.deleteFileFromDfs(fs, tableBasePath);
   }
 
   private void testUpsertsContinuousMode(HoodieTableType tableType, String tempDir, HoodieRecordType recordType) throws Exception {
@@ -895,7 +895,7 @@ public class TestHoodieDeltaStreamer extends HoodieDeltaStreamerTestBase {
       }
       return true;
     });
-    UtilitiesTestBase.Helpers.deleteFileFromDfs(dfs, tableBasePath);
+    UtilitiesTestBase.Helpers.deleteFileFromDfs(fs, tableBasePath);
   }
 
   static void deltaStreamerTestRunner(HoodieDeltaStreamer ds, HoodieDeltaStreamer.Config cfg, Function<Boolean, Boolean> condition) throws Exception {
@@ -966,7 +966,7 @@ public class TestHoodieDeltaStreamer extends HoodieDeltaStreamerTestBase {
       TestHelpers.assertAtLeastNReplaceCommits(1, tableBasePath, fs);
       return true;
     });
-    UtilitiesTestBase.Helpers.deleteFileFromDfs(dfs, tableBasePath);
+    UtilitiesTestBase.Helpers.deleteFileFromDfs(fs, tableBasePath);
   }
 
   @Test
@@ -1093,7 +1093,7 @@ public class TestHoodieDeltaStreamer extends HoodieDeltaStreamerTestBase {
     for (String replacedFilePath : replacedFilePaths) {
       assertFalse(meta.getFs().exists(new Path(replacedFilePath)));
     }
-    UtilitiesTestBase.Helpers.deleteFileFromDfs(dfs, tableBasePath);
+    UtilitiesTestBase.Helpers.deleteFileFromDfs(fs, tableBasePath);
   }
 
   private List<String> getAsyncServicesConfigs(int totalRecords, String autoClean, String inlineCluster, String inlineClusterMaxCommit,
@@ -1194,7 +1194,7 @@ public class TestHoodieDeltaStreamer extends HoodieDeltaStreamerTestBase {
       }
       return true;
     });
-    UtilitiesTestBase.Helpers.deleteFileFromDfs(dfs, tableBasePath);
+    UtilitiesTestBase.Helpers.deleteFileFromDfs(fs, tableBasePath);
   }
 
   @ParameterizedTest
@@ -1259,7 +1259,7 @@ public class TestHoodieDeltaStreamer extends HoodieDeltaStreamerTestBase {
     TestHelpers.assertAtLeastNCommits(4, tableBasePath, fs);
     TestHelpers.assertAtLeastNReplaceCommits(1, tableBasePath, fs);
     TestHelpers.assertDistinctRecordCount(totalRecords, tableBasePath, sqlContext);
-    UtilitiesTestBase.Helpers.deleteFileFromDfs(dfs, tableBasePath);
+    UtilitiesTestBase.Helpers.deleteFileFromDfs(fs, tableBasePath);
   }
 
   /**
@@ -1290,7 +1290,7 @@ public class TestHoodieDeltaStreamer extends HoodieDeltaStreamerTestBase {
     TestHelpers.assertAtLeastNCommits(4, tableBasePath, fs);
     TestHelpers.assertAtLeastNReplaceCommits(1, tableBasePath, fs);
     TestHelpers.assertDistinctRecordCount(1900, tableBasePath, sqlContext);
-    UtilitiesTestBase.Helpers.deleteFileFromDfs(dfs, tableBasePath);
+    UtilitiesTestBase.Helpers.deleteFileFromDfs(fs, tableBasePath);
   }
 
   @ParameterizedTest
@@ -1316,7 +1316,7 @@ public class TestHoodieDeltaStreamer extends HoodieDeltaStreamerTestBase {
     TestHelpers.assertAtLeastNCommits(4, tableBasePath, fs);
     TestHelpers.assertAtLeastNReplaceCommits(1, tableBasePath, fs);
     TestHelpers.assertDistinctRecordCount(totalRecords, tableBasePath, sqlContext);
-    UtilitiesTestBase.Helpers.deleteFileFromDfs(dfs, tableBasePath);
+    UtilitiesTestBase.Helpers.deleteFileFromDfs(fs, tableBasePath);
   }
 
   @ParameterizedTest
@@ -1364,7 +1364,7 @@ public class TestHoodieDeltaStreamer extends HoodieDeltaStreamerTestBase {
     } else {
       assertFalse(clusteringRequest.getTimestamp().equalsIgnoreCase(completeClusteringTimeStamp));
     }
-    UtilitiesTestBase.Helpers.deleteFileFromDfs(dfs, tableBasePath);
+    UtilitiesTestBase.Helpers.deleteFileFromDfs(fs, tableBasePath);
   }
 
   @ParameterizedTest
@@ -1413,7 +1413,7 @@ public class TestHoodieDeltaStreamer extends HoodieDeltaStreamerTestBase {
       }
     });
     if (runningMode.toLowerCase(Locale.ROOT).equals(SCHEDULE_AND_EXECUTE)) {
-      UtilitiesTestBase.Helpers.deleteFileFromDfs(dfs, tableBasePath);
+      UtilitiesTestBase.Helpers.deleteFileFromDfs(fs, tableBasePath);
     }
   }
 
@@ -1507,8 +1507,8 @@ public class TestHoodieDeltaStreamer extends HoodieDeltaStreamerTestBase {
     assertEquals(lastInstantForUpstreamTable,
         hiveClient.getLastCommitTimeSynced(tableName).get(),
         "The last commit that was synced should be updated in the TBLPROPERTIES");
-    UtilitiesTestBase.Helpers.deleteFileFromDfs(dfs, tableBasePath);
-    UtilitiesTestBase.Helpers.deleteFileFromDfs(dfs, downstreamTableBasePath);
+    UtilitiesTestBase.Helpers.deleteFileFromDfs(fs, tableBasePath);
+    UtilitiesTestBase.Helpers.deleteFileFromDfs(fs, downstreamTableBasePath);
   }
 
   @Test
@@ -1649,7 +1649,7 @@ public class TestHoodieDeltaStreamer extends HoodieDeltaStreamerTestBase {
     } catch (IllegalArgumentException e) {
       assertTrue(e.getMessage().contains("'--filter-dupes' needs to be disabled when '--op' is 'UPSERT' to ensure updates are not missed."));
     }
-    UtilitiesTestBase.Helpers.deleteFileFromDfs(dfs, tableBasePath);
+    UtilitiesTestBase.Helpers.deleteFileFromDfs(fs, tableBasePath);
   }
 
   @Test
@@ -2347,7 +2347,7 @@ public class TestHoodieDeltaStreamer extends HoodieDeltaStreamerTestBase {
     TestHelpers.assertRecordCount(1950, tableBasePath, sqlContext);
     TestHelpers.assertDistanceCount(1950, tableBasePath, sqlContext);
     TestHelpers.assertCommitMetadata("00001", tableBasePath, fs, 2);
-    UtilitiesTestBase.Helpers.deleteFileFromDfs(dfs, tableBasePath);
+    UtilitiesTestBase.Helpers.deleteFileFromDfs(fs, tableBasePath);
   }
 
   @Test
@@ -2405,7 +2405,7 @@ public class TestHoodieDeltaStreamer extends HoodieDeltaStreamerTestBase {
     List<String> tableFields = tableSchema.getFields().stream().map(Schema.Field::name).collect(Collectors.toList());
     // now assert that the partition column is not in the target schema
     assertFalse(tableFields.contains("partition_path"));
-    UtilitiesTestBase.Helpers.deleteFileFromDfs(dfs, tableBasePath);
+    UtilitiesTestBase.Helpers.deleteFileFromDfs(fs, tableBasePath);
   }
 
   @Test

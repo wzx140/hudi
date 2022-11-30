@@ -407,7 +407,7 @@ public class HoodieFlinkCopyOnWriteTable<T>
   @Override
   public Iterator<List<WriteStatus>> handleInsert(
       String instantTime, String partitionPath, String fileId,
-      Map<String, HoodieRecord> recordMap) {
+      Map<String, HoodieRecord<?>> recordMap) {
     HoodieCreateHandle<?, ?, ?, ?> createHandle =
         new HoodieCreateHandle(config, instantTime, this, partitionPath, fileId, recordMap, taskContextSupplier);
     createHandle.write();

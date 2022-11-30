@@ -56,13 +56,13 @@ public class FlinkConcatHandle<T, I, K, O>
    */
   @Override
   public void write(HoodieRecord oldRecord) {
-    Schema oldSchema = config.populateMetaFields() ? tableSchemaWithMetaFields : tableSchema;
+    Schema oldSchema = config.populateMetaFields() ? writeSchemaWithMetaFields : writeSchema;
     String key = oldRecord.getRecordKey(oldSchema, keyGeneratorOpt);
     try {
-      fileWriter.write(key, oldRecord, writeSchema);
+      fileWriter.write(key, oldRecord, oldSchema);
     } catch (IOException | RuntimeException e) {
       String errMsg = String.format("Failed to write old record into new file for key %s from old file %s to new file %s with writerSchema %s",
-          key, getOldFilePath(), newFilePath, writeSchemaWithMetaFields.toString(true));
+          key, getOldFilePath(), newFilePath, oldSchema.toString(true));
       LOG.debug("Old record is " + oldRecord);
       throw new HoodieUpsertException(errMsg, e);
     }
@@ -71,10 +71,9 @@ public class FlinkConcatHandle<T, I, K, O>
 
   @Override
   protected void writeIncomingRecords() throws IOException {
-    Schema schema = useWriterSchemaForCompaction ? tableSchemaWithMetaFields : tableSchema;
     while (recordItr.hasNext()) {
       HoodieRecord<T> record = recordItr.next();
-      writeInsertRecord(record, schema);
+      writeInsertRecord(record);
     }
   }
 }

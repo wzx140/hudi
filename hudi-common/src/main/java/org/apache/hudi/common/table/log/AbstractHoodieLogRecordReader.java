@@ -37,9 +37,9 @@ import org.apache.hudi.common.table.log.block.HoodieLogBlock;
 import org.apache.hudi.common.table.log.block.HoodieParquetDataBlock;
 import org.apache.hudi.common.table.timeline.HoodieTimeline;
 import org.apache.hudi.common.util.ClosableIterator;
+import org.apache.hudi.common.util.ClosableIteratorWithSchema;
 import org.apache.hudi.common.util.InternalSchemaCache;
 import org.apache.hudi.common.util.Option;
-import org.apache.hudi.common.util.SpillableMapUtils;
 import org.apache.hudi.common.util.ValidationUtils;
 import org.apache.hudi.common.util.collection.CloseableMappingIterator;
 import org.apache.hudi.common.util.collection.Pair;
@@ -59,6 +59,7 @@ import java.io.IOException;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -70,8 +71,6 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import static org.apache.hudi.avro.HoodieAvroUtils.rewriteRecordWithNewSchema;
-import static org.apache.hudi.common.util.TypeUtils.unsafeCast;
 import static org.apache.hudi.common.table.log.block.HoodieCommandBlock.HoodieCommandBlockTypeEnum.ROLLBACK_BLOCK;
 import static org.apache.hudi.common.table.log.block.HoodieLogBlock.HeaderMetadataType.COMPACTED_BLOCK_TIMES;
 import static org.apache.hudi.common.table.log.block.HoodieLogBlock.HeaderMetadataType.INSTANT_TIME;
@@ -639,10 +638,15 @@ public abstract class AbstractHoodieLogRecordReader {
    * handle it.
    */
   private void processDataBlock(HoodieDataBlock dataBlock, Option<KeySpec> keySpecOpt) throws Exception {
-    try (ClosableIterator<HoodieRecord> recordIterator = getRecordsIterator(dataBlock, keySpecOpt, recordType)) {
+    try (ClosableIteratorWithSchema<HoodieRecord> recordIterator = getRecordsIterator(dataBlock, keySpecOpt)) {
       while (recordIterator.hasNext()) {
-        HoodieRecord completedRecord = record.wrapIntoHoodieRecordPayloadWithParams(schema, hoodieTableMetaClient.getTableConfig().getProps(), this.simpleKeyGenFields,
-            this.withOperationField, this.partitionName, getPopulateMetaFields());
+        HoodieRecord completedRecord = recordIterator.next()
+            .wrapIntoHoodieRecordPayloadWithParams(recordIterator.getSchema(),
+                hoodieTableMetaClient.getTableConfig().getProps(),
+                this.simpleKeyGenFields,
+                this.withOperationField,
+                this.partitionName,
+                getPopulateMetaFields());
         processNextRecord(completedRecord);
         totalLogRecords.incrementAndGet();
       }
@@ -764,23 +768,28 @@ public abstract class AbstractHoodieLogRecordReader {
     return validBlockInstants;
   }
 
-  private ClosableIterator<IndexedRecord> getRecordsIterator(HoodieDataBlock dataBlock, Option<KeySpec> keySpecOpt) throws IOException {
-    ClosableIterator<IndexedRecord> blockRecordsIterator;
+  private ClosableIteratorWithSchema<HoodieRecord> getRecordsIterator(
+      HoodieDataBlock dataBlock, Option<KeySpec> keySpecOpt) throws IOException {
+    ClosableIterator<HoodieRecord> blockRecordsIterator;
     if (keySpecOpt.isPresent()) {
       KeySpec keySpec = keySpecOpt.get();
-      blockRecordsIterator = dataBlock.getRecordIterator(keySpec.keys, keySpec.fullKey);
+      blockRecordsIterator = (ClosableIterator) dataBlock
+          .getRecordIterator(keySpec.keys, keySpec.fullKey, recordType);
     } else {
-      blockRecordsIterator = dataBlock.getRecordIterator();
+      blockRecordsIterator = (ClosableIterator) dataBlock.getRecordIterator(recordType);
     }
 
-    Option<Function<IndexedRecord, IndexedRecord>> schemaEvolutionTransformerOpt =
+    Option<Pair<Function<HoodieRecord, HoodieRecord>, Schema>> schemaEvolutionTransformerOpt =
         composeEvolvedSchemaTransformer(dataBlock);
     // In case when schema has been evolved original persisted records will have to be
     // transformed to adhere to the new schema
     if (schemaEvolutionTransformerOpt.isPresent()) {
-      return new CloseableMappingIterator<>(blockRecordsIterator, schemaEvolutionTransformerOpt.get());
+      return ClosableIteratorWithSchema.newInstance(
+          new CloseableMappingIterator<>(blockRecordsIterator,
+              schemaEvolutionTransformerOpt.get().getLeft()),
+          schemaEvolutionTransformerOpt.get().getRight());
     } else {
-      return blockRecordsIterator;
+      return ClosableIteratorWithSchema.newInstance(blockRecordsIterator, dataBlock.getSchema());
     }
   }
 
@@ -793,7 +802,8 @@ public abstract class AbstractHoodieLogRecordReader {
    * @param dataBlock current processed block
    * @return final read schema.
    */
-  private Option<Function<IndexedRecord, IndexedRecord>> composeEvolvedSchemaTransformer(HoodieDataBlock dataBlock) {
+  private Option<Pair<Function<HoodieRecord, HoodieRecord>, Schema>> composeEvolvedSchemaTransformer(
+      HoodieDataBlock dataBlock) {
     if (internalSchema.isEmptySchema()) {
       return Option.empty();
     }
@@ -805,7 +815,18 @@ public abstract class AbstractHoodieLogRecordReader {
         true, false).mergeSchema();
     Schema mergedAvroSchema = AvroInternalSchemaConverter.convert(mergedInternalSchema, readerSchema.getFullName());
 
-    return Option.of((record) -> rewriteRecordWithNewSchema(record, mergedAvroSchema, Collections.emptyMap()));
+    return Option.of(Pair.of((record) -> {
+      try {
+        return record.rewriteRecordWithNewSchema(
+            dataBlock.getSchema(),
+            this.hoodieTableMetaClient.getTableConfig().getProps(),
+            mergedAvroSchema,
+            Collections.emptyMap());
+      } catch (IOException e) {
+        LOG.error("Error rewrite record with new schema", e);
+        throw new HoodieException(e);
+      }
+    }, mergedAvroSchema));
   }
 
   /**

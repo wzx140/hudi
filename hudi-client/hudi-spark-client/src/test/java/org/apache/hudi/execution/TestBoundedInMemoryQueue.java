@@ -85,7 +85,7 @@ public class TestBoundedInMemoryQueue extends HoodieClientTestHarness {
     final int numRecords = 128;
     final List<HoodieRecord> hoodieRecords = dataGen.generateInserts(instantTime, numRecords);
     final BoundedInMemoryQueueIterable<HoodieRecord, HoodieLazyInsertIterable.HoodieInsertValueGenResult> queue =
-        new BoundedInMemoryQueueIterable(FileIOUtils.KB, getTransformFunction(HoodieTestDataGenerator.AVRO_SCHEMA));
+        new BoundedInMemoryQueueIterable(FileIOUtils.KB, getCloningTransformer(HoodieTestDataGenerator.AVRO_SCHEMA));
     // Produce
     Future<Boolean> resFuture = executorService.submit(() -> {
       new IteratorBasedQueueProducer<>(hoodieRecords.iterator()).produce(queue);
@@ -125,7 +125,7 @@ public class TestBoundedInMemoryQueue extends HoodieClientTestHarness {
     final List<List<HoodieRecord>> recs = new ArrayList<>();
 
     final BoundedInMemoryQueueIterable<HoodieRecord, HoodieLazyInsertIterable.HoodieInsertValueGenResult> queue =
-        new BoundedInMemoryQueueIterable(FileIOUtils.KB, getTransformFunction(HoodieTestDataGenerator.AVRO_SCHEMA));
+        new BoundedInMemoryQueueIterable(FileIOUtils.KB, getCloningTransformer(HoodieTestDataGenerator.AVRO_SCHEMA));
 
     // Record Key to <Producer Index, Rec Index within a producer>
     Map<String, Tuple2<Integer, Integer>> keyToProducerAndIndexMap = new HashMap<>();
@@ -224,7 +224,7 @@ public class TestBoundedInMemoryQueue extends HoodieClientTestHarness {
     final long objSize = sizeEstimator.sizeEstimate(genResult);
     final long memoryLimitInBytes = recordLimit * objSize;
     final BoundedInMemoryQueueIterable<HoodieRecord, HoodieLazyInsertIterable.HoodieInsertValueGenResult> queue =
-        new BoundedInMemoryQueueIterable(memoryLimitInBytes, getTransformFunction(HoodieTestDataGenerator.AVRO_SCHEMA));
+        new BoundedInMemoryQueueIterable(memoryLimitInBytes, getCloningTransformer(HoodieTestDataGenerator.AVRO_SCHEMA));
 
     // Produce
     executorService.submit(() -> {
@@ -277,7 +277,7 @@ public class TestBoundedInMemoryQueue extends HoodieClientTestHarness {
     // stops and throws
     // correct exception back.
     BoundedInMemoryQueueIterable<HoodieRecord, Tuple2<HoodieRecord, Option<IndexedRecord>>> queue1 =
-        new BoundedInMemoryQueueIterable(memoryLimitInBytes, getTransformFunction(HoodieTestDataGenerator.AVRO_SCHEMA));
+        new BoundedInMemoryQueueIterable(memoryLimitInBytes, getCloningTransformer(HoodieTestDataGenerator.AVRO_SCHEMA));
 
     // Produce
     Future<Boolean> resFuture = executorService.submit(() -> {
@@ -305,7 +305,7 @@ public class TestBoundedInMemoryQueue extends HoodieClientTestHarness {
     when(mockHoodieRecordsIterator.hasNext()).thenReturn(true);
     when(mockHoodieRecordsIterator.next()).thenThrow(expectedException);
     BoundedInMemoryQueueIterable<HoodieRecord, Tuple2<HoodieRecord, Option<IndexedRecord>>> queue2 =
-        new BoundedInMemoryQueueIterable(memoryLimitInBytes, getTransformFunction(HoodieTestDataGenerator.AVRO_SCHEMA));
+        new BoundedInMemoryQueueIterable(memoryLimitInBytes, getCloningTransformer(HoodieTestDataGenerator.AVRO_SCHEMA));
 
     // Produce
     Future<Boolean> res = executorService.submit(() -> {
