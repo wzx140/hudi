@@ -43,6 +43,7 @@ public class KeyGenUtils {
   protected static final String HUDI_DEFAULT_PARTITION_PATH = PartitionPathEncodeUtils.DEFAULT_PARTITION_PATH;
   public static final String DEFAULT_PARTITION_PATH_SEPARATOR = "/";
   public static final String DEFAULT_RECORD_KEY_PARTS_SEPARATOR = ",";
+  public static final String DEFAULT_RECORD_KEY_PARTS_NAME_SEPARATOR = ":";
 
   /**
    * Fetches record key from the GenericRecord.
@@ -93,11 +94,14 @@ public class KeyGenUtils {
     for (String recordKeyField : recordKeyFields) {
       String recordKeyValue = HoodieAvroUtils.getNestedFieldValAsString(record, recordKeyField, true, consistentLogicalTimestampEnabled);
       if (recordKeyValue == null) {
-        recordKey.append(recordKeyField + ":" + NULL_RECORDKEY_PLACEHOLDER + ",");
+        recordKey.append(recordKeyField + DEFAULT_RECORD_KEY_PARTS_NAME_SEPARATOR
+            + NULL_RECORDKEY_PLACEHOLDER + DEFAULT_RECORD_KEY_PARTS_SEPARATOR);
       } else if (recordKeyValue.isEmpty()) {
-        recordKey.append(recordKeyField + ":" + EMPTY_RECORDKEY_PLACEHOLDER + ",");
+        recordKey.append(recordKeyField + DEFAULT_RECORD_KEY_PARTS_NAME_SEPARATOR
+            + EMPTY_RECORDKEY_PLACEHOLDER + DEFAULT_RECORD_KEY_PARTS_SEPARATOR);
       } else {
-        recordKey.append(recordKeyField + ":" + recordKeyValue + ",");
+        recordKey.append(recordKeyField + DEFAULT_RECORD_KEY_PARTS_NAME_SEPARATOR
+            + recordKeyValue + DEFAULT_RECORD_KEY_PARTS_SEPARATOR);
         keyIsNullEmpty = false;
       }
     }
