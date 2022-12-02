@@ -36,7 +36,7 @@ public class BootstrapRecordConsumer extends IteratorBasedQueueConsumer<HoodieRe
 
   @Override
   public void consumeOneRecord(HoodieRecord record) {
-    bootstrapHandle.write(record, bootstrapHandle.getWriterSchemaWithMetaFields(), new TypedProperties());
+    bootstrapHandle.write(record, bootstrapHandle.getWriterSchema(), new TypedProperties());
   }
 
   @Override
