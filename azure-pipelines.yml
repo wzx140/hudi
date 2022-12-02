@@ -139,7 +139,7 @@ stages:
             displayName: Top 100 long-running testcases
       - job: UT_FT_3
         displayName: UT FT spark-datasource
-        timeoutInMinutes: '150'
+        timeoutInMinutes: '180'
         steps:
           - task: Maven@4
             displayName: maven install
